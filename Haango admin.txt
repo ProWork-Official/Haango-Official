@@ -1,0 +1,284 @@
+HAANGO ADMIN PANEL
+==================
+Administrative capability reference
+Last reviewed: 13 September 2026
+
+1. ADMIN ACCESS AND HIERARCHY
+------------------------------
+Admin roles:
+- ADMIN: level 1
+- SUPER_ADMIN: level 2
+- MASTER_ADMIN: level 3
+
+Admin route:
+- Admin users are redirected to /admin after login.
+- Non-admin users are redirected to the normal dashboard.
+- Backend admin routes require authentication and an admin role.
+- Admin levels control promotion and demotion permissions.
+
+Role capabilities:
+- ADMIN can access the admin panel and operational moderation tools.
+- SUPER_ADMIN can promote eligible users to ADMIN and manage admin roles
+  according to the role hierarchy.
+- MASTER_ADMIN has the highest role-management authority and can promote or
+  demote higher-level administrative roles according to backend rules.
+- Demotion is progressive:
+  SUPER_ADMIN -> ADMIN -> CUSTOMER.
+
+2. ADMIN DASHBOARD
+-------------------
+Dashboard metrics and operational views include:
+- Total users/customers.
+- Total administrators.
+- Total companions/buddies.
+- Booking counts and booking status information.
+- Revenue/payment-related booking visibility.
+- Featured companion state.
+- Review moderation information.
+- Cancellation requests.
+- Reports.
+- Analytics summaries.
+
+The dashboard uses backend APIs rather than only static demo values. Response
+unwrapping exists because older endpoints may return direct data or nested data.
+
+3. USER MANAGEMENT
+------------------
+User list:
+- View users with pagination.
+- View normal users, companions, and admin users as applicable.
+- Navigate to the all-users page when a larger user list needs a dedicated view.
+
+User actions:
+- Edit user data.
+- Suspend/deactivate a user.
+- Delete a user.
+- Promote eligible users to ADMIN.
+- Promote eligible users to SUPER_ADMIN.
+- Demote administrators according to the progressive hierarchy.
+- View role and admin-level information.
+
+All users page:
+- Dedicated route: /admin/users.
+- Full paginated user list.
+- Edit user modal/form.
+- Delete user action.
+- Navigation back to admin dashboard.
+
+4. ADMIN USER MANAGEMENT
+------------------------
+Administrative user view:
+- View current admin users.
+- View their role/admin level.
+- Make eligible users administrators.
+- Promote eligible administrators to super administrators.
+- Demote administrators.
+- Apply permission checks based on the acting administrator's level.
+
+Important operational rule:
+- The frontend must not be treated as the security boundary. Backend
+  requireAdminLevel checks must remain authoritative for every role action.
+
+5. COMPANION MODERATION
+-----------------------
+Buddy verification:
+- View companion profiles awaiting/holding verification status.
+- Verify/approve a companion.
+- Suspend a companion.
+- Unsuspend/approve a suspended companion.
+- Display suspended status in the buddy list.
+
+Companion profile management:
+- View companion profile information.
+- Edit companion data from the admin panel.
+- Update profile fields similarly to normal profile editing.
+- Manage public availability/listing state where supported.
+- Feature or unfeature a companion.
+
+Featured companions:
+- Load current featured-buddy configuration.
+- Toggle a companion as featured.
+- Use featured state in public discovery surfaces.
+
+6. BOOKING MANAGEMENT
+---------------------
+Admin booking view:
+- View all bookings.
+- View booking status.
+- View payment status and amount.
+- View customer/companion relationship.
+- Review operational booking information.
+
+Cancellation management:
+- View pending cancellation requests.
+- View requester, booking, reason, details, and timestamps.
+- Approve cancellation.
+- Reject cancellation.
+- Add admin notes where supported.
+- Approved cancellation updates the related booking.
+
+7. REPORTS AND SAFETY MODERATION
+---------------------------------
+Report management:
+- View user/report submissions.
+- Review report status and report details.
+- Update report status and moderation outcome.
+- Investigate reported users or interactions.
+
+Safety operations:
+- Suspend accounts when policy violations require action.
+- Review companion verification state.
+- Review inappropriate or unsafe behavior reports.
+- Use safety/community guidelines as the policy reference.
+
+8. REVIEW MODERATION
+--------------------
+Admin review capabilities:
+- Load reviews through the admin review endpoint.
+- Inspect review text, rating, images, author, and companion.
+- Delete an inappropriate review.
+- Recalculate the companion's rating after deletion.
+
+The admin panel must continue to protect review deletion with admin
+authentication and backend authorization.
+
+9. ANALYTICS AND TRAFFIC
+------------------------
+Available analytics:
+- Daily traffic.
+- Unique visitors.
+- Total page visits.
+- Average time spent.
+- Popular pages.
+- Seven-day traffic trend.
+- User-specific analytics where supported.
+
+Analytics API areas:
+- /api/analytics/daily-traffic
+- /api/analytics/popular-pages
+- /api/analytics/traffic-trend
+- /api/analytics/user-analytics/:userId
+
+The public tracking endpoint records page visits. Admin analytics endpoints
+require authentication and an admin role.
+
+10. PAYOUT AND WITHDRAWAL OPERATIONS
+------------------------------------
+Admin withdrawal capability:
+- View companion withdrawal requests.
+- View payout details/status.
+- Update withdrawal status.
+- Handle payout lifecycle events when RazorpayX is configured.
+- Review payout webhook outcomes.
+
+RazorpayX production requirements:
+- Separate RazorpayX credentials.
+- Account activation and KYC.
+- Sufficient RazorpayX balance.
+- Correct webhook configuration.
+- Operational reconciliation for failed or delayed payouts.
+
+11. ADMIN API SURFACE
+---------------------
+Admin routes currently include:
+- GET    /api/admin/dashboard
+- GET    /api/admin/users
+- GET    /api/admin/admin-users
+- GET    /api/admin/buddies
+- GET    /api/admin/featured-buddies
+- PATCH  /api/admin/buddies/:id/featured
+- PATCH  /api/admin/buddies/:id
+- PATCH  /api/admin/buddies/:id/verify
+- PATCH  /api/admin/buddies/:id/suspend
+- PATCH  /api/admin/buddies/:id/unsuspend
+- PATCH  /api/admin/users/:id/suspend
+- PATCH  /api/admin/users/:id
+- DELETE /api/admin/users/:id
+- POST   /api/admin/users/:id/promote-to-admin
+- POST   /api/admin/users/:id/promote-to-super-admin
+- POST   /api/admin/users/:id/demote-from-admin
+- GET    /api/admin/reports
+- PATCH  /api/admin/reports/:id
+- GET    /api/admin/reviews
+- DELETE /api/admin/reviews/:id
+- GET    /api/admin/cancellation-requests
+- PATCH  /api/admin/cancellation-requests/:id
+- GET    /api/admin/withdrawals
+- PATCH  /api/admin/withdrawals/:id
+
+12. IMMUTABLE AUDIT LOGGING
+---------------------------
+Implemented audit logging records:
+- Role promotion and demotion.
+- User suspension.
+- Buddy verification, suspension, and reinstatement.
+- Buddy profile edits.
+- Review deletion.
+- Refunds.
+- Cancellation decisions.
+- Withdrawal decisions.
+
+Each record stores the acting administrator, role, admin level, action,
+target, safe metadata, request IP, user-agent, and timestamp. Audit records
+are immutable. Administrators can view paginated records through:
+
+GET /api/admin/audit-logs
+
+13. AREAS THAT STILL NEED WORK
+------------------------------
+Priority 1 - security and governance:
+- Add audit-log export and a documented long-term retention policy.
+- Add explicit requireAdminLevel middleware to every sensitive admin action,
+  not only broad requireAdmin checks.
+- Add server-side tests for ADMIN, SUPER_ADMIN, and MASTER_ADMIN permissions.
+- Remove or rotate all development credentials printed by seed tooling before
+  any production deployment.
+- Add CSRF protection or strict same-site cookie strategy where cookie auth is
+  used.
+
+Priority 1 - moderation workflow:
+- Add clear moderation statuses and filters for reports, reviews, buddies,
+  users, and cancellation requests.
+- Add reason fields and moderator notes for every destructive action.
+- Add confirmation and undo/recovery workflows for accidental deletion.
+- Add evidence/history visibility for repeated reports and suspensions.
+
+Priority 1 - reliability:
+- Add integration tests for every admin endpoint.
+- Add pagination, filtering, sorting, and search consistently across all admin
+  lists.
+- Add endpoint health/version diagnostics to distinguish stale backend
+  deployments from missing routes.
+- Standardize all admin response formats to prevent 404/empty-dashboard
+  regressions.
+
+Priority 2 - operations:
+- Add bulk moderation actions with safe limits.
+- Add exportable CSV reports for users, bookings, traffic, reviews, and
+  withdrawals.
+- Add dashboards for payment failures, refunds, pending payouts, and dispute
+  risk.
+- Add alerts for unusual traffic, repeated reports, failed webhooks, and
+  suspicious account activity.
+
+Priority 2 - privacy:
+- Define retention and deletion rules for analytics and location data.
+- Restrict user-specific analytics to a documented admin permission.
+- Mask sensitive payout, contact, and identity data in admin tables.
+- Add an access log for administrators viewing sensitive records.
+
+Priority 2 - admin UX:
+- Replace browser confirm dialogs with accessible modal dialogs.
+- Add inline loading and disabled states for every admin action.
+- Add toast notifications for success/failure.
+- Preserve filter and pagination state during edits.
+- Add responsive table/card layouts for small screens.
+
+Priority 3 - maintainability:
+- Split AdminPage.jsx into dashboard, users, buddies, bookings, reports,
+  reviews, cancellations, analytics, and role-management components.
+- Create shared admin API client helpers and response normalization.
+- Add a documented admin permission matrix.
+- Add OpenAPI documentation for the admin API.
+- Add staging seed data that does not expose real credentials or resemble
+  production identities.

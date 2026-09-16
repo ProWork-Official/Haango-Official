@@ -1,0 +1,356 @@
+HAANGO FUNCTIONALITY
+=====================
+Product capability reference
+Last reviewed: 13 September 2026
+
+1. PRODUCT SUMMARY
+------------------
+Haango is a social companionship marketplace. Customers can discover verified
+companions, plan a public activity, pay securely, communicate through a booking
+chat, confirm the real meeting with an OTP, share live locations near the
+meeting time, complete the booking, and leave a review.
+
+The application has:
+- React frontend in "Haango - Frontend".
+- Express/MongoDB backend in "Haango - Backend".
+- Razorpay checkout and refund integration.
+- Role-based users: CUSTOMER, BUDDY, ADMIN, SUPER_ADMIN, MASTER_ADMIN.
+
+2. PUBLIC WEBSITE AND DISCOVERY
+-------------------------------
+Available pages:
+- Home
+- Explore companions
+- Companion profile
+- Experiences
+- How it works
+- About
+- FAQ
+- Safety
+- Contact
+- Support
+- Community Guidelines
+- Buddy Guidelines
+- Privacy Policy
+- Terms
+- Cancellation Policy
+- Become a Buddy
+
+Discovery capabilities:
+- Browse companion cards.
+- Filter/search companion listings through the explore flow.
+- Open a companion profile.
+- View companion name, age, city, profile content, activities, pricing,
+  availability, rating, reviews, and images where available.
+- Start a booking from a companion profile.
+- Featured companions can be controlled by administrators.
+
+3. AUTHENTICATION AND ACCOUNT
+-----------------------------
+Supported account actions:
+- Sign up with validation and OTP-related signup flow.
+- Log in with password.
+- Login OTP request flow.
+- Refresh access session.
+- Logout.
+- Password reset OTP request and password reset.
+- Current-user/session lookup.
+- Protected routes for logged-in users.
+- Automatic redirect to dashboard after normal login.
+- Automatic redirect to admin panel after admin login.
+
+User profile capabilities:
+- View and edit personal profile.
+- Name, city, gender, date of birth, hobbies, address, profile image,
+  gallery, and profile completion information.
+- Profile completion prompt can be dismissed and restored.
+- Account activity status and last-seen information are stored.
+
+4. COMPANION/BUDDY FUNCTIONALITY
+---------------------------------
+Companion onboarding:
+- Open the Become a Buddy information page.
+- Open the companion dashboard.
+- Create a companion profile.
+- Request browser location permission when creating the first companion profile.
+- Edit the companion profile later.
+
+Companion profile fields:
+- Display name
+- Age
+- Gender
+- About text
+- Short summary
+- City
+- Languages
+- Hourly rate
+- Response time
+- Public listing visibility
+- Availability status
+- Girls-only preference
+- Availability schedule by day and time
+
+Companion operations:
+- Receive booking requests.
+- Accept pending bookings.
+- Reject pending bookings.
+- View all companion bookings.
+- Start the meeting verification flow.
+- Complete the meeting verification flow.
+- Message customers on paid bookings.
+- View wallet balance.
+- Save payout details.
+- Request withdrawals.
+- View withdrawal status/history through wallet functionality.
+
+5. BOOKING PLANNER
+------------------
+The booking planner uses the fixed Haango activity catalog:
+- Movie Night
+- Coffee & Conversations
+- Lunch / Dinner
+- Gaming
+- Shopping
+- Date
+- City Travel
+
+Booking steps:
+1. Select activity.
+2. Select date.
+3. Select time.
+4. Select duration.
+5. Select public meeting location.
+6. Review companion and plan details.
+7. Confirm and pay.
+
+Current booking data:
+- Selected companion is loaded dynamically.
+- Activity, schedule, duration, location, companion price, platform fee,
+  total price, and notes are submitted to the backend.
+- Self-booking is prevented server-side.
+- Customers and companions can book according to the implemented role rules.
+- Customer browser location permission is requested when confirming a first
+  booking.
+
+6. PAYMENT AND BOOKING LIFECYCLE
+---------------------------------
+Booking states:
+- PENDING
+- CONFIRMED
+- ONGOING
+- COMPLETED
+- CANCELLED
+- REJECTED
+
+Payment states:
+- PENDING
+- PAID
+- FAILED
+- REFUNDED
+- PARTIALLY_REFUNDED
+
+Razorpay functionality:
+- Create booking payment order.
+- Open Razorpay checkout.
+- Use Haango branding, logo, customer name, email, and theme.
+- Verify payment signature on the backend.
+- Update booking payment state.
+- Refund eligible booking payments.
+- Handle Razorpay webhook events.
+- Create and verify paid meeting-extension orders.
+
+Booking pages:
+- Customer booking history.
+- Upcoming bookings.
+- Past bookings.
+- Cancelled/rejected bookings.
+- Pending payment action.
+- Refund/payment status.
+- Companion booking schedule.
+
+7. CANCELLATION AND EXTENSION
+-----------------------------
+Cancellation:
+- Direct cancellation is available before the cancellation lock window.
+- After the lock window, the user submits a cancellation request.
+- Cancellation reason options include emergency, safety, schedule change,
+  companion unavailable, and other.
+- "Other" requires written details.
+- Administrators review cancellation requests.
+- Approved requests cancel the booking.
+
+Meeting extension:
+- A paid ongoing meeting can request additional hours.
+- Extension pricing is calculated through the payment service.
+- Razorpay order and payment verification are used.
+- Extension amount and status are stored on the booking.
+
+8. MEETING CONFIRMATION OTP
+---------------------------
+Start meeting:
+- Customer can generate a start OTP one hour before the scheduled meeting.
+- The OTP is displayed on the customer booking page.
+- Customer tells the OTP to the companion.
+- Companion enters the OTP using an in-page form.
+- Successful verification changes the booking to ONGOING.
+
+End meeting:
+- Customer generates an end OTP after the meeting is ongoing.
+- Customer tells the OTP to the companion.
+- Companion enters the OTP using the companion dashboard form.
+- Successful verification changes the booking to COMPLETED.
+
+OTP behavior:
+- Codes are hashed in the database.
+- Codes expire after the configured short validity period.
+- Only the customer generates the code.
+- Only the companion enters the code.
+
+9. LIVE LOCATION
+-----------------
+Location access:
+- Customer is asked for browser location permission during first booking
+  confirmation.
+- Companion is asked for browser location permission during first companion
+  profile creation.
+- Browser permission behavior remains controlled by the browser. One-time
+  permission may cause another prompt later; persistent permission will not.
+
+Location sharing:
+- Customer sees only "Show companion location".
+- Companion sees only "Show user location".
+- Clicking the role-specific button obtains the viewer's current location,
+  sends it to the backend, fetches both participant locations, and opens the
+  in-page map.
+- The map displays two pointers:
+  - Blue: current user
+  - Green: companion
+- The map refreshes participant data periodically while open.
+- The current browser location is watched for updates.
+- Location access is restricted to the booking participants.
+- Location sharing is locked until two hours before the meeting.
+- Location operations are restricted to eligible paid, active bookings.
+- Location updates are rate-limited.
+- Location access is recorded with booking, actor, action, IP, and user-agent
+  context.
+- Location entries older than the retention window are purged automatically.
+- Completed, cancelled, rejected, and refunded bookings clear stored locations.
+- The map marks stale coordinates so users can distinguish old data from live
+  data.
+- Closing the map stops the browser geolocation watcher.
+
+Location API operations:
+- Publish current participant location.
+- Fetch both participant locations.
+- Stop sharing current participant location.
+
+10. MESSAGING, SAFETY, AND REPORTING
+-------------------------------------
+Messaging:
+- View booking conversations.
+- Load messages for a booking.
+- Send messages on eligible paid bookings.
+- Mark messages as read.
+- Enter a conversation from the booking/dashboard flow.
+- Internet call room support is booking-scoped and unlocks near the meeting.
+
+Safety controls:
+- Block another user.
+- Unblock another user.
+- Report a user/message situation.
+- Server-side contact-detail redaction is applied to message content.
+- Safety, community, buddy, and cancellation guidance pages are available.
+
+11. REVIEWS
+-----------
+Review eligibility:
+- Review is available after a paid, completed booking.
+
+Review features:
+- One review per customer/companion pair.
+- Ratings from 1 to 5 in half-star increments.
+- Written paragraph review.
+- Up to two review images.
+- Edit an existing review.
+- Delete own review.
+- Duplicate review attempt returns an explanatory message and edit flow.
+- Companion ratings are recalculated.
+- Public companion reviews can be filtered by rating thresholds, including
+  4.5+, 4+, 3+, and 2+.
+- Administrators can delete inappropriate reviews.
+
+12. WALLET AND PAYOUTS
+----------------------
+Companion wallet:
+- Calculate wallet balance from completed paid bookings.
+- Save bank or UPI payout details.
+- Submit withdrawal requests.
+- Apply minimum withdrawal/balance rules.
+- View payout/withdrawal status.
+- Process payout webhook status updates.
+- RazorpayX support exists for contacts, fund accounts, payouts, and status
+  handling when the required RazorpayX configuration is available.
+
+13. ANALYTICS
+-------------
+First-party analytics tracks:
+- Page visits.
+- Anonymous visitor ID stored in local storage.
+- Unique visitors.
+- Time spent on pages.
+- Average visit duration.
+- Popular pages.
+- Seven-day traffic trend.
+
+Analytics are visible to administrators through the admin dashboard.
+
+14. AREAS THAT STILL NEED WORK
+------------------------------
+Priority 1 - production reliability:
+- Add automated integration tests for authentication, booking, payment
+  verification, OTP, cancellation, location authorization, reviews, wallet,
+  and admin permissions.
+- Add end-to-end tests for customer and companion booking journeys.
+- Add webhook replay/idempotency tests and payment failure recovery tests.
+- Add a deployment process that reliably restarts the backend after route/code
+  changes.
+
+Priority 1 - location privacy and correctness:
+- Add explicit user-facing controls to revoke location sharing from every
+  booking card.
+- Consider storing high-volume location history separately or using a
+  geospatial model if volume grows.
+- Add operational monitoring for location cleanup failures and rate-limit
+  events.
+
+Priority 1 - security:
+- Move all development/demo credentials out of seed output and documentation
+  before production.
+- Review JWT refresh-token rotation and revocation behavior.
+- Add stronger authorization tests for every booking and admin endpoint.
+- Validate upload size/type/content for review images.
+- Configure production CORS, cookies, HTTPS, CSP, and webhook secrets.
+
+Priority 2 - UX:
+- Replace remaining window.prompt/window.confirm calls for cancellation,
+  extension, admin deletion, message reporting, and review deletion with
+  accessible in-page dialogs.
+- Add loading, retry, empty, and error states consistently.
+- Show clear payment pending/failed/retry states.
+- Add notifications for booking acceptance, rejection, OTP issuance, reviews,
+  cancellation decisions, and withdrawals.
+
+Priority 2 - product completeness:
+- Add availability conflict checking and calendar blocking.
+- Add companion/customer notification delivery.
+- Add a proper map library or a controlled map provider if advanced routing,
+  clustering, or background updates are required.
+- Add admin audit logs for moderation, role changes, refunds, and payout
+  decisions.
+
+Priority 3 - maintainability:
+- Standardize API response shapes and frontend unwrapping.
+- Split very large page components into feature components/hooks.
+- Add shared date/time and booking-state helpers.
+- Add TypeScript or stronger runtime schemas for API contracts.
+- Add API documentation/OpenAPI and environment configuration documentation.

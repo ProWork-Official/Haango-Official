@@ -1,0 +1,258 @@
+# Haango Backend
+
+Social companionship marketplace API built with Node.js, Express, and MongoDB Atlas.
+
+## Tech Stack
+
+- **Runtime:** Node.js (ES Modules)
+- **Framework:** Express.js
+- **Database:** MongoDB Atlas
+- **ODM:** Mongoose
+- **Auth:** JWT + bcrypt
+- **Security:** Helmet, CORS, express-rate-limit, express-validator
+
+## Folder Structure
+
+```
+backend/
+├── src/
+│   ├── config/
+│   │   ├── database.js
+│   │   └── environment.js
+│   ├── controllers/
+│   ├── middleware/
+│   ├── models/
+│   ├── routes/
+│   ├── services/
+│   ├── utils/
+│   ├── validators/
+│   ├── app.js
+│   └── server.js
+├── .env.example
+├── package.json
+└── README.md
+```
+
+## Installation
+
+```bash
+cd backend
+npm install
+cp .env.example .env
+# Edit .env with your credentials
+```
+
+## MongoDB Atlas Setup
+
+1. Go to [MongoDB Atlas](https://www.mongodb.com/atlas) and create a free cluster.
+2. Under "Database Access", create a database user.
+3. Under "Network Access", allow your IP address.
+4. Click "Connect" → "Connect your application" → copy the connection string.
+5. Paste it as `MONGODB_URI` in `.env`.
+
+## Environment Variables
+
+| Variable | Description |
+|---|---|
+| `PORT` | Server port (default 5000) |
+| `MONGODB_URI` | MongoDB Atlas connection string |
+| `JWT_SECRET` | Secret for signing JWT tokens |
+| `JWT_EXPIRES_IN` | Token expiry (default 7d) |
+| `CLIENT_URL` | Frontend origin for CORS |
+| `RAZORPAY_KEY_ID` | Razorpay key (leave empty if not configured) |
+| `RAZORPAY_KEY_SECRET` | Razorpay secret |
+| `RAZORPAYX_KEY_ID` | RazorpayX payout API key |
+| `RAZORPAYX_KEY_SECRET` | RazorpayX payout API secret |
+| `RAZORPAYX_ACCOUNT_NUMBER` | RazorpayX business account number used to fund payouts |
+| `RAZORPAYX_WEBHOOK_SECRET` | Secret used to verify RazorpayX payout webhooks |
+| `PLATFORM_FEE_PERCENTAGE` | Customer-facing Haango fee % (default 3) |
+| `MIN_BOOKING_DURATION` | Minimum hours (default 1) |
+| `MAX_BOOKING_DURATION` | Maximum hours (default 8) |
+
+## Running Locally
+
+```bash
+npm run dev    # Development with auto-reload
+npm start      # Production
+```
+
+## Seed Data
+
+```bash
+npm run seed
+```
+
+Creates demo data: 8 activities, 10 customers, 6 buddies, 5 bookings, 5 reviews, 1 admin.
+
+**Demo credentials:**
+- Admin: `admin@haango.com` / `admin123456`
+- Customer: `customer1@haango.com` / `customer123`
+- Buddy: `aarav@haango.com` / `buddy123`
+
+⚠ Seeded data is development/demo data — not real users.
+
+## API Endpoints
+
+### Auth
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/api/auth/signup` | Public | Register (CUSTOMER or BUDDY only) |
+| POST | `/api/auth/login` | Public | Login |
+| POST | `/api/auth/logout` | Required | Logout |
+| GET | `/api/auth/me` | Required | Current user |
+
+### Activities
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/api/activities` | Public | List active activities |
+| GET | `/api/activities/:id` | Public | Single activity |
+
+### Buddies
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/api/buddies` | Public | Browse verified buddies (filters: activity, city, minPrice, maxPrice, rating, search, page, limit) |
+| GET | `/api/buddies/:id` | Public | Public buddy profile |
+| GET | `/api/buddies/profile/me` | BUDDY | Own buddy profile |
+| POST | `/api/buddies/profile` | BUDDY | Create buddy profile |
+| PATCH | `/api/buddies/profile/me` | BUDDY | Update buddy profile |
+
+### Bookings
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/api/bookings` | CUSTOMER | Create booking |
+| GET | `/api/bookings/my-bookings` | CUSTOMER | Customer's bookings |
+| GET | `/api/bookings/buddy` | BUDDY | Buddy's bookings |
+| GET | `/api/bookings/:id` | Auth | Single booking (ownership checked) |
+| PATCH | `/api/bookings/:id/cancel` | Auth | Cancel booking |
+| PATCH | `/api/bookings/:id/accept` | BUDDY | Accept booking |
+| PATCH | `/api/bookings/:id/reject` | BUDDY | Reject booking |
+| PATCH | `/api/bookings/:id/start` | BUDDY | Start booking |
+| PATCH | `/api/bookings/:id/complete` | BUDDY | Complete booking |
+| GET | `/api/bookings/admin/all` | ADMIN | All bookings |
+
+### Reviews
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/api/reviews` | CUSTOMER | Create review (completed bookings only) |
+| GET | `/api/reviews/buddy/:buddyId` | Public | Buddy's reviews |
+
+### Messages
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/api/messages/conversations` | Auth | User's conversations |
+| GET | `/api/messages/:bookingId` | Auth | Messages for a booking |
+| POST | `/api/messages/:bookingId` | Auth | Send message |
+| PATCH | `/api/messages/:id/read` | Auth | Mark as read |
+
+### Reports
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/api/reports` | Auth | Report a user |
+| GET | `/api/reports/admin/all` | ADMIN | All reports |
+| PATCH | `/api/reports/admin/:id` | ADMIN | Update report status |
+
+### Notifications
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/api/notifications` | Auth | User's notifications |
+| PATCH | `/api/notifications/:id/read` | Auth | Mark as read |
+
+### Admin
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/api/admin/dashboard` | ADMIN | Platform stats |
+| GET | `/api/admin/users` | ADMIN | All users |
+| GET | `/api/admin/buddies` | ADMIN | All buddy profiles |
+| PATCH | `/api/admin/buddies/:id/verify` | ADMIN | Verify buddy |
+| PATCH | `/api/admin/buddies/:id/suspend` | ADMIN | Suspend buddy |
+| PATCH | `/api/admin/users/:id/suspend` | ADMIN | Suspend user |
+
+### Payments
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/api/payments/create-order` | CUSTOMER | Create Razorpay order |
+| POST | `/api/payments/verify` | CUSTOMER | Verify payment |
+| POST | `/api/payments/webhook` | Public | Razorpay webhook |
+
+### Companion Wallet and Automatic Payouts
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/api/wallet` | BUDDY | Wallet balance, payout details, and withdrawal history |
+| PUT | `/api/wallet/payout-details` | BUDDY | Save bank account or UPI payout details |
+| POST | `/api/wallet/withdrawals` | BUDDY | Create an automatic RazorpayX payout |
+| POST | `/api/wallet/webhook` | Public | Receive signed RazorpayX payout status events |
+| GET | `/api/admin/withdrawals` | ADMIN | View payout requests |
+| PATCH | `/api/admin/withdrawals/:id` | ADMIN | Manually override a payout status if needed |
+
+### Health
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/health` | Health check |
+
+## Authentication Flow
+
+1. Client sends `POST /api/auth/signup` or `POST /api/auth/login`
+2. Server returns `{ user, token }`
+3. Client stores token (localStorage or cookie)
+4. Client sends `Authorization: Bearer <token>` header on protected routes
+5. Server validates token via `requireAuth` middleware
+6. Role-based access via `requireRole('CUSTOMER')`, `requireRole('BUDDY')`, `requireRole('ADMIN')`
+
+## Roles & Permissions
+
+| Role | Can do |
+|---|---|
+| CUSTOMER | Browse buddies, create bookings, review completed bookings, message |
+| BUDDY | Manage own profile, accept/reject/start/complete bookings, message |
+| ADMIN | Everything + dashboard, verify/suspend buddies, manage reports |
+
+**Security rules:**
+- Users cannot self-register as ADMIN
+- Buddies cannot modify their own rating, reviewCount, completedBookings, or verificationStatus
+- Customers can only access their own bookings
+- Buddies can only access bookings assigned to them
+- Pricing is always calculated server-side — frontend values are never trusted
+- Double-booking prevention: backend checks for conflicting bookings before creating
+
+## Payment Integration
+
+Checkout uses Razorpay. Companion withdrawals use RazorpayX Payouts, which requires separate API credentials and an enabled RazorpayX account.
+
+Configure the Checkout variables for customer payments and the RazorpayX variables for automatic companion payouts. Configure the RazorpayX webhook URL as `/api/wallet/webhook` and use the same value as `RAZORPAYX_WEBHOOK_SECRET` in the backend environment.
+
+Withdrawal flow:
+1. Companion saves a bank account or UPI ID.
+2. A withdrawal request creates a RazorpayX contact and fund account if needed.
+3. The backend creates the RazorpayX payout automatically.
+4. Signed payout webhooks update the withdrawal to `PROCESSING`, `PAID`, or `REJECTED`.
+
+Customer payments are never marked paid based on frontend claims; server-side signature and capture verification is required.
+
+## Production Deployment
+
+1. Set `NODE_ENV=production`
+2. Set a strong `JWT_SECRET`
+3. Set `CLIENT_URL` to your frontend domain
+4. Set `MONGODB_URI` to your production Atlas cluster
+5. Configure Razorpay credentials
+6. Run `npm install && npm start`
+
+## Response Format
+
+All responses follow:
+
+```json
+{ "success": true, "data": {} }
+```
+
+With pagination:
+
+```json
+{ "success": true, "data": [], "pagination": { "page": 1, "limit": 20, "total": 100, "totalPages": 5 } }
+```
+
+Errors:
+
+```json
+{ "success": false, "message": "Human readable message", "errorCode": "ERROR_CODE" }
+```
