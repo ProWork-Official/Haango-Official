@@ -75,6 +75,13 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
+app.get('/', (_req, res) => {
+  res.json({
+    success: true,
+    message: 'Haango backend is running',
+  });
+});
+
 app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/buddies', buddyRoutes);
