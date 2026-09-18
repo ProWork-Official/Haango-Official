@@ -300,7 +300,7 @@ export default function AdminPage({ onNavigate }) {
 
   return (
     <div className="min-h-screen bg-ink-50 pb-20 pt-16 md:pt-18">
-      <div className="border-b border-ink-100 bg-white"><div className="container-max section-pad flex items-center justify-between gap-4 py-6"><div><div className="mb-2 inline-flex items-center gap-2 rounded-full bg-ink-900 px-3 py-1.5 text-xs font-semibold text-white"><Shield size={14} /> Admin Dashboard</div><h1 className="font-display text-3xl font-extrabold text-ink-900">Haango Operations</h1></div><button onClick={() => onNavigate('home')} className="btn-ghost">Back to Haango</button></div></div>
+      <div className="border-b border-ink-100 bg-white"><div className="container-max section-pad flex items-center justify-between gap-4 py-6"><div><div className="mb-2 inline-flex items-center gap-2 rounded-full bg-ink-900 px-3 py-1.5 text-xs font-semibold text-white"><Shield size={14} /> Admin Dashboard</div><h1 className="font-display text-3xl font-extrabold text-ink-900">Haango Operations</h1></div><div className="flex items-center gap-2"><button onClick={() => onNavigate('/admin/coupons')} className="btn-secondary">Manage coupons</button><button onClick={() => onNavigate('home')} className="btn-ghost">Back to Haango</button></div></div></div>
       <div className="container-max section-pad py-8">
         {error && <p className="mb-6 rounded-2xl bg-error-50 p-4 text-sm text-error-600">{error}</p>}
         {loading ? <p className="text-ink-500">Loading live admin data...</p> : <>

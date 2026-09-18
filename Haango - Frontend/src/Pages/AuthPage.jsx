@@ -29,6 +29,7 @@ export default function AuthPage({
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [signupCode, setSignupCode] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [otp, setOtp] = useState('');
@@ -146,6 +147,7 @@ export default function AuthPage({
             phone: phone.trim(),
             password,
             userType,
+            signupCode: signupCode.trim(),
           });
 
           if (error) {
@@ -185,6 +187,7 @@ export default function AuthPage({
           password,
           userType,
           otp: otp.trim(),
+          signupCode: signupCode.trim(),
         });
 
         if (error) {
@@ -531,6 +534,19 @@ export default function AuthPage({
                       {errors.phone}
                     </p>
                   )}
+                </div>
+              )}
+
+              {/* Password */}
+              {mode === 'signup' && (
+                <div>
+                  <input
+                    type="text"
+                    value={signupCode}
+                    onChange={(event) => setSignupCode(event.target.value.toUpperCase())}
+                    placeholder="Referral or coupon code (optional)"
+                    className="w-full rounded-2xl border-2 border-[#ece3d8] bg-[#fffaf5] px-4 py-3.5 text-sm text-[#102038] placeholder-[#a89a88] outline-none focus:border-[#ff7418] focus:bg-white"
+                  />
                 </div>
               )}
 

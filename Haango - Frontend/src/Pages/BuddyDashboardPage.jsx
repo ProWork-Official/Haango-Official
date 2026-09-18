@@ -13,6 +13,7 @@ import {
   Trash2,
   ImagePlus,
   X,
+  Gift,
 } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { apiRequest } from '../lib/api';
@@ -472,6 +473,9 @@ export default function BuddyDashboardPage({ onNavigate }) {
   const [onboardingStep, setOnboardingStep] = useState('profile');
   const [editingPanel, setEditingPanel] = useState(null);
   const [visibilitySaving, setVisibilitySaving] = useState(false);
+  const [earningsPeriod, setEarningsPeriod] = useState('month');
+  const [walletSummary, setWalletSummary] = useState(null);
+  const [bonusClaiming, setBonusClaiming] = useState(false);
   const [currentTime] = useState(() => Date.now());
   const isBuddyAccount = becameBuddy || authProfile?.role === 'BUDDY' || authProfile?.user_type === 'buddy' || authProfile?.is_buddy;
 
@@ -525,6 +529,15 @@ export default function BuddyDashboardPage({ onNavigate }) {
   }, [isBuddyAccount]);
 
   useEffect(() => {
+    if (!isBuddyAccount || onboardingStep !== 'dashboard') return undefined;
+    let active = true;
+    apiRequest(`/wallet?period=${earningsPeriod}`)
+      .then((response) => { if (active) setWalletSummary(response); })
+      .catch((error) => console.error('Failed to load wallet summary:', error));
+    return () => { active = false; };
+  }, [earningsPeriod, isBuddyAccount, onboardingStep]);
+
+  useEffect(() => {
     const buddyUserId = buddyProfile?.userId?._id || buddyProfile?.userId;
     if (!buddyUserId) return undefined;
     let active = true;
@@ -548,15 +561,21 @@ export default function BuddyDashboardPage({ onNavigate }) {
       .slice(0, 3);
   }, [buddyBookings, currentTime]);
 
-  const totalMonthEarnings = useMemo(() => {
-    return buddyBookings
-      .filter((booking) => booking.paymentStatus === 'PAID')
-      .reduce((sum, booking) => sum + ((Number(booking.totalAmount || 0) - Number(booking.platformFee || 0)) * 0.8), 0);
-  }, [buddyBookings]);
+  const periodStart = useMemo(() => {
+    const start = new Date();
+    if (earningsPeriod === '3m') start.setMonth(start.getMonth() - 3);
+    if (earningsPeriod === '6m') start.setMonth(start.getMonth() - 6);
+    if (earningsPeriod === '1y') start.setFullYear(start.getFullYear() - 1);
+    if (earningsPeriod === 'month') start.setDate(1);
+    start.setHours(0, 0, 0, 0);
+    return start;
+  }, [earningsPeriod]);
+
+  const periodEarnings = Number(walletSummary?.earnedThisPeriod || 0);
 
   const todayBookings = buddyBookings.filter((booking) => new Date(booking.date).toDateString() === new Date().toDateString()).length;
-  const earningsByMonth = Array.from({ length: 12 }, (_, index) => buddyBookings
-    .filter((booking) => booking.paymentStatus === 'PAID' && new Date(booking.date).getMonth() === index)
+  const earningsByMonth = Array.from({ length: earningsPeriod === 'month' ? 1 : earningsPeriod === '3m' ? 3 : earningsPeriod === '6m' ? 6 : 12 }, (_, index) => buddyBookings
+    .filter((booking) => booking.paymentStatus === 'PAID' && booking.bookingStatus === 'COMPLETED' && new Date(booking.updatedAt || booking.date) >= periodStart && new Date(booking.updatedAt || booking.date).getMonth() === new Date().getMonth() - (earningsPeriod === 'month' ? 0 : index))
     .reduce((sum, booking) => sum + ((Number(booking.totalAmount || 0) - Number(booking.platformFee || 0)) * 0.8), 0));
   const maxMonthlyEarnings = Math.max(...earningsByMonth, 1);
 
@@ -575,6 +594,19 @@ export default function BuddyDashboardPage({ onNavigate }) {
       console.error('Failed to update Explore visibility:', visibilityError);
     } finally {
       setVisibilitySaving(false);
+    }
+  };
+
+  const claimEarlyStarterBonus = async () => {
+    if (bonusClaiming) return;
+    setBonusClaiming(true);
+    try {
+      const response = await apiRequest('/bonuses/early-starter/claim', { method: 'POST' });
+      setWalletSummary((current) => current ? { ...current, bonus: response } : current);
+    } catch (bonusError) {
+      console.error('Failed to claim Early Starter Bonus:', bonusError);
+    } finally {
+      setBonusClaiming(false);
     }
   };
 
@@ -624,6 +656,22 @@ export default function BuddyDashboardPage({ onNavigate }) {
 
   return (
     <div className="pt-16 md:pt-18 animate-fade-in min-h-screen pb-20 md:pb-8">
+      {walletSummary?.bonus?.claimable && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 px-4 backdrop-blur-sm">
+          <div className="card w-full max-w-md p-6 shadow-lift" role="dialog" aria-modal="true" aria-labelledby="early-starter-bonus-title">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
+              <Gift size={24} />
+            </div>
+            <p className="mt-5 text-xs font-semibold uppercase tracking-wider text-coral-500">Limited-time buddy reward</p>
+            <h2 id="early-starter-bonus-title" className="mt-1 font-display text-2xl font-extrabold text-ink-900">Early Starter Bonus</h2>
+            <p className="mt-3 text-sm leading-relaxed text-ink-500">Claim your ₹75 bonus for creating a buddy profile. It has been added to your wallet and can be withdrawn with your eligible balance.</p>
+            <p className="mt-3 text-xs text-ink-400">Claim available until 30 October 2026.</p>
+            <button type="button" onClick={claimEarlyStarterBonus} disabled={bonusClaiming} className="btn-primary mt-6 w-full disabled:opacity-50">
+              {bonusClaiming ? 'Claiming...' : 'Claim ₹75 bonus'}
+            </button>
+          </div>
+        </div>
+      )}
       <div className="container-max section-pad py-8">
         <div className="flex items-center flex-wrap gap-3 mb-8">
           {activeBuddy.image ? (
@@ -658,8 +706,8 @@ export default function BuddyDashboardPage({ onNavigate }) {
               color: 'coral',
             },
             {
-              label: 'Earned This Month',
-              value: formatCurrency(totalMonthEarnings),
+              label: earningsPeriod === 'month' ? 'Earned This Month' : `Earned Last ${earningsPeriod}`,
+              value: formatCurrency(periodEarnings),
               icon: IndianRupee,
               color: 'success',
             },
@@ -671,7 +719,7 @@ export default function BuddyDashboardPage({ onNavigate }) {
             },
             {
               label: 'Completion Rate',
-              value: `${activeBuddy.profileCompletion}%`,
+              value: `${Number(walletSummary?.completionRate || 0)}%`,
               icon: CheckCircle2,
               color: 'teal',
             },
@@ -713,27 +761,24 @@ export default function BuddyDashboardPage({ onNavigate }) {
           />
         )}
 
-        {editingPanel === 'payout' ? (
-          <div className="mb-8">
-            <WalletPanel onboardingOnly onSaved={() => setEditingPanel(null)} />
-          </div>
-        ) : (
-          <div className="mb-8 flex flex-wrap items-center gap-3">
-            <button type="button" onClick={() => setEditingPanel('profile')} className="btn-secondary w-full sm:w-auto">Update buddy details</button>
-              <button type="button" onClick={() => setEditingPanel('payout')} className="btn-secondary w-full sm:w-auto">Update bank detail</button>
-            <label className="ml-0 inline-flex w-full cursor-pointer items-center justify-between gap-3 text-sm font-semibold text-ink-700 sm:ml-auto sm:w-auto">
-              <span>Show me in Explore</span>
-              <input
-                type="checkbox"
-                className="peer sr-only"
-                checked={buddyProfile?.showOnFindCompanions !== false}
-                disabled={visibilitySaving}
-                onChange={(event) => updateExploreVisibility(event.target.checked)}
-              />
-                <span className="relative h-6 w-11 rounded-full bg-red-500 transition peer-checked:bg-green-500 after:absolute after:left-1 after:top-1 after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow-sm after:transition peer-checked:after:translate-x-5" />
-            </label>
-          </div>
-        )}
+        <div className="mb-8 flex flex-wrap items-center gap-3">
+          <button type="button" onClick={() => setEditingPanel('profile')} className="btn-secondary w-full sm:w-auto">Update buddy details</button>
+          <label className="ml-0 inline-flex w-full cursor-pointer items-center justify-between gap-3 text-sm font-semibold text-ink-700 sm:ml-auto sm:w-auto">
+            <span>Show me in Explore</span>
+            <input
+              type="checkbox"
+              className="peer sr-only"
+              checked={buddyProfile?.showOnFindCompanions !== false}
+              disabled={visibilitySaving}
+              onChange={(event) => updateExploreVisibility(event.target.checked)}
+            />
+            <span className="relative h-6 w-11 rounded-full bg-red-500 transition peer-checked:bg-green-500 after:absolute after:left-1 after:top-1 after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow-sm after:transition peer-checked:after:translate-x-5" />
+          </label>
+        </div>
+
+        <div className="mb-8">
+          <WalletPanel />
+        </div>
 
         <div className="grid lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
@@ -793,17 +838,19 @@ export default function BuddyDashboardPage({ onNavigate }) {
             <div>
               <h2 className="font-display font-bold text-lg text-ink-900 mb-4">Earnings</h2>
               <div className="card p-6">
-                <div className="flex items-center justify-between mb-5">
+                <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
                   <div>
-                    <p className="text-sm text-ink-400">This month</p>
+                    <p className="text-sm text-ink-400">{earningsPeriod === 'month' ? 'This month' : `Last ${earningsPeriod}`}</p>
                     <p className="font-display font-extrabold text-3xl text-ink-900">
-                      {formatCurrency(totalMonthEarnings)}
+                      {formatCurrency(periodEarnings)}
                     </p>
                   </div>
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-success-50 text-success-600 text-sm font-medium">
-                    <TrendingUp size={16} />
-                    + recent bookings
-                  </div>
+                  <select value={earningsPeriod} onChange={(event) => setEarningsPeriod(event.target.value)} className="input-field !mt-0 w-auto text-sm">
+                    <option value="month">This month</option>
+                    <option value="3m">Last 3 months</option>
+                    <option value="6m">Last 6 months</option>
+                    <option value="1y">Last 1 year</option>
+                  </select>
                 </div>
 
                 <div className="flex items-end gap-2 h-32">
@@ -816,13 +863,7 @@ export default function BuddyDashboardPage({ onNavigate }) {
                   ))}
                 </div>
 
-                <div className="flex justify-between mt-2 text-[10px] text-ink-400">
-                  <span>Jan</span>
-                  <span>Mar</span>
-                  <span>May</span>
-                  <span>Jul</span>
-                  <span>Sep</span>
-                </div>
+                <div className="flex justify-between mt-2 text-[10px] text-ink-400"><span>{earningsPeriod === 'month' ? 'Current month' : 'Older'}</span><span>Now</span></div>
               </div>
             </div>
 

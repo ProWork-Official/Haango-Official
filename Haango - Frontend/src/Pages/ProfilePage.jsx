@@ -20,6 +20,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5005/api'
 async function apiRequest(path) {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     credentials: 'include',
+    cache: 'no-store',
     headers: { 'Content-Type': 'application/json' },
   });
 

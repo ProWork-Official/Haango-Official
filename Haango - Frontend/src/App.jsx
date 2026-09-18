@@ -23,6 +23,7 @@ import BuddyBookingsPage from './Pages/BuddyBookingsPage';
 import { AuthProvider, useAuth } from './lib/auth';
 import { apiRequest } from './lib/api';
 import AdminAllUsersPage from './Pages/AdminAllUsersPage';
+import AdminCouponsPage from './Pages/AdminCouponsPage';
 import ContactPage from './Pages/ContactPage';
 import SupportPage from './Pages/SupportPage';
 import CommunityGuidelinesPage from './Pages/CommunityGuidelinesPage';
@@ -225,9 +226,9 @@ function AppContent() {
           } />
 
           <Route path="/profile" element={
-            selectedBuddy ? (
+            (selectedBuddy || new URLSearchParams(location.search).get('buddyId')) ? (
               <ProfilePage
-                buddyId={selectedBuddy}
+                buddyId={selectedBuddy || new URLSearchParams(location.search).get('buddyId')}
                 onNavigate={routeNavigate}
                 onBack={() => routeNavigate(prevPage || '/')}
                 onBook={startBooking}
@@ -311,6 +312,11 @@ function AppContent() {
           <Route path="/admin/users" element={
             ['ADMIN', 'SUPER_ADMIN', 'MASTER_ADMIN'].includes(profile?.role)
               ? <AdminAllUsersPage onNavigate={routeNavigate} />
+              : <Navigate to="/" replace />
+          } />
+          <Route path="/admin/coupons" element={
+            ['ADMIN', 'SUPER_ADMIN', 'MASTER_ADMIN'].includes(profile?.role)
+              ? <AdminCouponsPage onNavigate={routeNavigate} />
               : <Navigate to="/" replace />
           } />
 

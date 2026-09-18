@@ -103,7 +103,7 @@ export default function WalletPanel({ onboardingOnly = false, onSaved }) {
   const requestWithdrawal = async (event) => {
     event.preventDefault();
     const availableBalance = Number(summary?.availableBalance || 0);
-    const minimumWithdrawal = Number(summary?.minimumWithdrawal || 100);
+    const minimumWithdrawal = Number(summary?.minimumWithdrawal || 300);
     const requestedAmount = Number(amount);
 
     if (availableBalance < minimumWithdrawal) {
@@ -150,7 +150,7 @@ export default function WalletPanel({ onboardingOnly = false, onSaved }) {
       </div>
 
       {!onboardingOnly && <div className="grid gap-4 sm:grid-cols-3">
-        <div className="card bg-ink-900 p-5 text-black"><p className="text-xs text-ink-400">Available to withdraw</p><p className="mt-2 font-display text-2xl font-extrabold">{currency(summary?.availableBalance)}</p></div>
+        <div className="card bg-ink-900 p-5 text-black"><p className="text-xs text-ink-400">Available to withdraw</p><p className="mt-2 font-display text-2xl font-extrabold">{currency(summary?.availableBalance)}</p><p className="mt-1 text-xs text-ink-400">Minimum withdrawal: {currency(summary?.minimumWithdrawal || 300)}</p></div>
         <div className="card p-5"><p className="text-xs text-ink-400">Total earned</p><p className="mt-2 font-display text-2xl font-extrabold text-ink-900">{currency(summary?.totalEarned)}</p></div>
         <div className="card p-5"><p className="text-xs text-ink-400">In withdrawal pipeline</p><p className="mt-2 font-display text-2xl font-extrabold text-ink-900">{currency(summary?.totalWithdrawn)}</p></div>
       </div>}
@@ -182,11 +182,11 @@ export default function WalletPanel({ onboardingOnly = false, onSaved }) {
         {!onboardingOnly && <div className="space-y-6">
           <form onSubmit={requestWithdrawal} className="card p-6">
             <div className="mb-5 flex items-center gap-2"><Send size={18} className="text-coral-500" /><h3 className="font-display text-lg font-bold text-ink-900">Withdraw earnings</h3></div>
-            <p className="text-sm text-ink-500">Minimum withdrawal: {currency(summary?.minimumWithdrawal || 100)}. Eligible requests are sent automatically through RazorpayX.</p>
-            <label className="mt-4 block text-sm font-medium text-ink-700">Amount<input className={inputClass} type="number" min={summary?.minimumWithdrawal || 100} max={summary?.availableBalance > 0 ? summary.availableBalance : undefined} value={amount} onChange={(event) => { setAmount(event.target.value); setError(''); }} placeholder="Enter amount" required /></label>
-            <button type="submit" disabled={withdrawing || !summary?.wallet || Number(summary?.availableBalance || 0) < Number(summary?.minimumWithdrawal || 100)} className="btn-primary mt-5 w-full disabled:opacity-50"><Banknote size={16} /> {withdrawing ? 'Submitting...' : 'Request withdrawal'}</button>
+            <p className="text-sm text-ink-500">Minimum withdrawal: {currency(summary?.minimumWithdrawal || 300)}. Eligible requests are sent automatically through RazorpayX.</p>
+            <label className="mt-4 block text-sm font-medium text-ink-700">Amount<input className={inputClass} type="number" min={summary?.minimumWithdrawal || 300} max={summary?.availableBalance > 0 ? summary.availableBalance : undefined} value={amount} onChange={(event) => { setAmount(event.target.value); setError(''); }} placeholder="Enter amount" required /></label>
+            <button type="submit" disabled={withdrawing || !summary?.wallet || Number(summary?.availableBalance || 0) < Number(summary?.minimumWithdrawal || 300)} className="btn-primary mt-5 w-full disabled:opacity-50"><Banknote size={16} /> {withdrawing ? 'Submitting...' : 'Request withdrawal'}</button>
             {!summary?.wallet && <p className="mt-3 text-xs text-amber-600">Save your payout details before requesting a withdrawal.</p>}
-            {summary?.wallet && Number(summary?.availableBalance || 0) < Number(summary?.minimumWithdrawal || 100) && <p className="mt-3 text-xs text-amber-600">No withdrawable balance yet. Earnings become available after a paid booking is completed.</p>}
+            {summary?.wallet && Number(summary?.availableBalance || 0) < Number(summary?.minimumWithdrawal || 300) && <p className="mt-3 text-xs text-amber-600">No withdrawable balance yet. You need at least ₹300 available to withdraw.</p>}
           </form>
 
           <div className="card p-6"><h3 className="font-display text-lg font-bold text-ink-900">Withdrawal history</h3><div className="mt-4 space-y-3">{summary?.withdrawals?.length ? summary.withdrawals.map((withdrawal) => <div key={withdrawal._id} className="flex items-center justify-between border-b border-ink-100 pb-3 text-sm last:border-0"><span><span className="font-semibold text-ink-900">{currency(withdrawal.amount)}</span><span className="ml-2 text-xs text-ink-400">{withdrawal.destinationMasked}</span></span><span className="text-xs font-semibold text-ink-500">{withdrawal.status}</span></div>) : <p className="text-sm text-ink-500">No withdrawal requests yet.</p>}</div></div>

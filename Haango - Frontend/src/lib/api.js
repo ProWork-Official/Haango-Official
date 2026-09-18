@@ -4,6 +4,7 @@ export async function apiRequest(path, options = {}) {
   const accessToken = localStorage.getItem('haango_access_token');
   const response = await fetch(`${API_BASE_URL}${path}`, {
     credentials: 'include',
+    cache: 'no-store',
     headers: {
       'Content-Type': 'application/json',
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),

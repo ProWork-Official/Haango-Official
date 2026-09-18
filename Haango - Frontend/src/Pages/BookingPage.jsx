@@ -143,6 +143,11 @@ export default function BookingPage({
   const [confirmed, setConfirmed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [paymentError, setPaymentError] = useState('');
+  const [couponCode, setCouponCode] = useState('');
+  const [couponDiscount, setCouponDiscount] = useState(0);
+  const [couponMessage, setCouponMessage] = useState('');
+  const [applyingCoupon, setApplyingCoupon] = useState(false);
+  const [walletBalance, setWalletBalance] = useState(0);
 
   useEffect(() => {
     if (!buddy) return;
@@ -230,6 +235,14 @@ export default function BookingPage({
     return () => { active = false; };
   }, [buddyId]);
 
+  useEffect(() => {
+    if (!user) return undefined;
+    apiRequest('/customer-wallet')
+      .then((wallet) => setWalletBalance(Number(wallet?.balance || 0)))
+      .catch(() => setWalletBalance(0));
+    return undefined;
+  }, [user]);
+
   if (loading) {
     return <div className="pt-20 text-center text-ink-500">Loading booking details...</div>;
   }
@@ -247,6 +260,7 @@ export default function BookingPage({
   const buddyFee = buddy.pricePerHour * duration;
   const hangoFee = Math.round((buddyFee * 3) / 100);
   const total = buddyFee + hangoFee;
+  const payableTotal = Math.max(0, total - couponDiscount);
   const showPricingBreakdown = step > 0;
 
   if (isSelfBooking) {
@@ -356,7 +370,7 @@ export default function BookingPage({
               </span>
 
               <span className="font-display font-bold text-lg text-ink-900">
-                ₹{total.toLocaleString('en-IN')}
+                ₹{payableTotal.toLocaleString('en-IN')}
               </span>
             </div>
           </div>
@@ -781,6 +795,28 @@ export default function BookingPage({
                 </p>
 
                 <div className="card p-6">
+                  <div className="mb-5">
+                    <label className="block text-sm font-medium text-ink-700">Add coupon code</label>
+                    <div className="mt-1 flex gap-2">
+                      <input className="input-field !mt-0 flex-1" value={couponCode} onChange={(event) => { setCouponCode(event.target.value.toUpperCase()); setCouponDiscount(0); setCouponMessage(''); }} placeholder="Enter coupon code" />
+                      <button type="button" disabled={applyingCoupon || !couponCode.trim()} onClick={async () => {
+                        setApplyingCoupon(true);
+                        setCouponMessage('');
+                        try {
+                          const result = await apiRequest('/coupons/validate', { method: 'POST', body: JSON.stringify({ code: couponCode.trim(), totalAmount: total }) });
+                          setCouponDiscount(Number(result?.amount || 0));
+                          setCouponMessage(`Coupon applied. You save ₹${Number(result?.amount || 0).toLocaleString('en-IN')}.`);
+                        } catch (couponError) {
+                          setCouponDiscount(0);
+                          setCouponMessage(couponError.message || 'Invalid coupon code.');
+                        } finally {
+                          setApplyingCoupon(false);
+                        }
+                      }} className="btn-secondary mt-0 shrink-0 disabled:opacity-50">{applyingCoupon ? 'Checking...' : 'Apply'}</button>
+                    </div>
+                    {couponMessage && <p className={`mt-2 text-xs ${couponDiscount > 0 ? 'text-success-600' : 'text-red-500'}`}>{couponMessage}</p>}
+                  </div>
+                  {walletBalance > 0 && <p className="mb-5 rounded-2xl bg-teal-50 px-4 py-3 text-sm text-teal-700">Wallet balance available: ₹{walletBalance.toLocaleString('en-IN')}</p>}
                   {showPricingBreakdown && (
                     <div className="space-y-3 mb-5">
                       <div className="flex justify-between text-sm">
@@ -812,10 +848,12 @@ export default function BookingPage({
                       Total
                     </span>
 
-                    <span className="font-display font-extrabold text-2xl text-ink-900">
-                      ₹{total.toLocaleString('en-IN')}
+                    <span className="text-right">
+                      {couponDiscount > 0 && <span className="block text-sm font-medium text-ink-400 line-through">₹{total.toLocaleString('en-IN')}</span>}
+                      <span className="font-display text-2xl font-extrabold text-ink-900">₹{payableTotal.toLocaleString('en-IN')}</span>
                     </span>
                   </div>
+                  {couponDiscount > 0 && <div className="mt-3 flex justify-between text-sm text-success-600"><span>Coupon discount</span><span>-₹{couponDiscount.toLocaleString('en-IN')}</span></div>}
                 </div>
 
                 <button
@@ -840,6 +878,7 @@ export default function BookingPage({
                           startTime: time,
                           duration,
                           meetingLocation: location,
+                          couponCode: couponCode.trim(),
                         }),
                       });
 
@@ -847,6 +886,11 @@ export default function BookingPage({
                         method: 'POST',
                         body: JSON.stringify({ bookingId: booking._id || booking.id }),
                       });
+                      if (order.walletOnly) {
+                        setConfirmed(true);
+                        setSubmitting(false);
+                        return;
+                      }
                       const scriptLoaded = await loadRazorpayScript();
                       if (!scriptLoaded) throw new Error('Unable to load the Razorpay checkout.');
 
@@ -900,7 +944,7 @@ export default function BookingPage({
                   disabled={submitting}
                   className="btn-primary w-full mt-6 text-base py-4 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {submitting ? 'Creating booking...' : `Confirm & Pay ₹${total.toLocaleString('en-IN')}`}
+                  {submitting ? 'Creating booking...' : `Confirm & Pay ₹${payableTotal.toLocaleString('en-IN')}`}
                 </button>
 
                 <button
@@ -1019,13 +1063,15 @@ export default function BookingPage({
                     </span>
                   </div>
 
+                  {couponDiscount > 0 && <div className="flex justify-between text-sm text-success-600"><span>Coupon discount</span><span>-₹{couponDiscount.toLocaleString('en-IN')}</span></div>}
+
                   <div className="flex justify-between items-center pt-2">
                     <span className="font-display font-bold text-ink-900">
                       Total
                     </span>
 
                     <span className="font-display font-extrabold text-xl text-ink-900">
-                      ₹{total.toLocaleString('en-IN')}
+                      ₹{payableTotal.toLocaleString('en-IN')}
                     </span>
                   </div>
                 </div>

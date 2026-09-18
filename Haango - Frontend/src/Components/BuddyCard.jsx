@@ -3,6 +3,7 @@ import {
   BadgeCheck,
   MapPin,
   Heart,
+  Share2,
 } from 'lucide-react';
 
 export default function BuddyCard({
@@ -12,6 +13,28 @@ export default function BuddyCard({
   liked = false,
   onLike,
 }) {
+  const shareBuddy = async (event) => {
+    event.stopPropagation();
+    const shareUrl = `${window.location.origin}/profile?buddyId=${encodeURIComponent(buddy.id)}`;
+    const shareData = {
+      title: `${buddy.name} on Haango`,
+      text: buddy.tagline || `Meet ${buddy.name} on Haango.`,
+      url: shareUrl,
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else if (navigator.clipboard) {
+        await navigator.clipboard.writeText(shareUrl);
+      }
+    } catch (shareError) {
+      if (shareError.name !== 'AbortError') {
+        console.error('Failed to share buddy profile:', shareError);
+      }
+    }
+  };
+
   return (
     <div
       onClick={onClick}
@@ -30,23 +53,37 @@ export default function BuddyCard({
 
         <div className="absolute inset-0 bg-gradient-to-t from-ink-900/70 via-transparent to-transparent" />
 
-        {/* Favorite button */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onLike?.(buddy.id);
-          }}
-          className="no-tap absolute top-3 right-3 w-9 h-9 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center shadow-soft transition-all duration-200 hover:scale-110 active:scale-95"
-        >
-          <Heart
-            size={18}
-            className={`transition-all duration-200 ${
-              liked
-                ? 'text-[#FF6B4A] fill-[#FF6B4A]'
-                : 'text-[#878D9C]'
-            }`}
-          />
-        </button>
+        <div className="absolute top-3 right-3 flex gap-2">
+          <button
+            type="button"
+            onClick={shareBuddy}
+            title="Share buddy profile"
+            aria-label={`Share ${buddy.name}'s profile`}
+            className="no-tap flex h-9 w-9 items-center justify-center rounded-full bg-white/90 shadow-soft backdrop-blur-sm transition-all duration-200 hover:scale-110 active:scale-95"
+          >
+            <Share2 size={16} className="text-[#878D9C]" />
+          </button>
+
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onLike?.(buddy.id);
+            }}
+            title={liked ? 'Remove from favorites' : 'Add to favorites'}
+            aria-label={liked ? 'Remove from favorites' : 'Add to favorites'}
+            className="no-tap flex h-9 w-9 items-center justify-center rounded-full bg-white/90 shadow-soft backdrop-blur-sm transition-all duration-200 hover:scale-110 active:scale-95"
+          >
+            <Heart
+              size={18}
+              className={`transition-all duration-200 ${
+                liked
+                  ? 'text-[#FF6B4A] fill-[#FF6B4A]'
+                  : 'text-[#878D9C]'
+              }`}
+            />
+          </button>
+        </div>
 
         {/* Verified badge */}
         <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-white/90 backdrop-blur-sm shadow-soft">
@@ -114,12 +151,12 @@ export default function BuddyCard({
 
         {/* Interests */}
         <div className="flex flex-wrap gap-1.5 mt-3">
-          {buddy.interests
+          {(Array.isArray(buddy.interests) ? buddy.interests : [])
             .slice(0, 3)
-            .map((interest) => (
+            .map((interest, interestIndex) => (
               <span
                 key={interest}
-                className="px-2.5 py-1 rounded-full bg-[#f6f6f6] text-xs font-medium text-ink-600"
+                className={`px-2.5 py-1 rounded-full bg-[#f6f6f6] text-xs font-medium text-ink-600 ${interestIndex === 2 ? 'sm:hidden' : ''}`}
               >
                 {interest}
               </span>

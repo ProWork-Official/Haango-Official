@@ -3,6 +3,7 @@ import {
   Calendar,
   CheckCircle2,
   ChevronRight,
+  Copy,
   Circle,
   Sparkles,
 } from 'lucide-react';
@@ -39,6 +40,8 @@ export default function DashboardPage({ onNavigate, onSelectBuddy, onMessage }) 
   const [blockedLoading, setBlockedLoading] = useState(true);
   const [upcomingBookings, setUpcomingBookings] = useState([]);
   const [editingField, setEditingField] = useState(null);
+  const [customerWallet, setCustomerWallet] = useState(null);
+  const [referralCopied, setReferralCopied] = useState(false);
 
   const completion = useMemo(() => {
     const totalSteps = 3;
@@ -77,6 +80,14 @@ export default function DashboardPage({ onNavigate, onSelectBuddy, onMessage }) 
       .then((data) => { if (active) setBlockedUsers(Array.isArray(data) ? data : []); })
       .catch(() => {})
       .finally(() => { if (active) setBlockedLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    apiRequest('/customer-wallet')
+      .then((wallet) => { if (active) setCustomerWallet(wallet); })
+      .catch(() => {});
     return () => { active = false; };
   }, []);
 
@@ -205,6 +216,35 @@ export default function DashboardPage({ onNavigate, onSelectBuddy, onMessage }) 
                 <ChevronRight size={16} />
               </button>
             )}
+          </div>
+        </div>
+
+        <div className="mb-8 grid gap-4 sm:grid-cols-2">
+          <div className="card bg-ink-900 p-5 text-white">
+            <p className="text-xs text-black">Wallet balance</p>
+            <p className="mt-2 font-display text-2xl text-[#F25C3A] font-extrabold">₹{Number(customerWallet?.balance || 0).toLocaleString('en-IN')}</p>
+            <p className="mt-1 text-xs text-black">Use this balance on your next booking.</p>
+          </div>
+          <div className="card relative p-5">
+            <button
+              type="button"
+              onClick={async () => {
+                const code = profile?.referral_code;
+                if (!code || !navigator.clipboard) return;
+                await navigator.clipboard.writeText(code);
+                setReferralCopied(true);
+                window.setTimeout(() => setReferralCopied(false), 1800);
+              }}
+              disabled={!profile?.referral_code}
+              title="Copy referral code"
+              aria-label="Copy referral code"
+              className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-ink-50 text-ink-500 transition hover:bg-coral-50 hover:text-coral-500 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Copy size={16} />
+            </button>
+            <p className="text-xs text-ink-400">Your referral code</p>
+            <p className="mt-2 font-display text-2xl font-extrabold tracking-wider text-ink-900">{profile?.referral_code || 'Available after next login'}</p>
+            <p className="mt-1 text-xs text-ink-500">{referralCopied ? 'Copied to clipboard.' : 'Share it with friends. Earn ₹100 when their first booking is ₹750 or more.'}</p>
           </div>
         </div>
 

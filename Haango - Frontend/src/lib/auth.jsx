@@ -51,6 +51,7 @@ function normalizeProfile(user) {
     gallery: Array.isArray(user.gallery) ? user.gallery : [],
     profile_completion: user.profileCompletion || user.profile_completion || 0,
     profile_prompt_dismissed_at: user.profilePromptDismissedAt || user.profile_prompt_dismissed_at || null,
+    referral_code: user.referralCode || user.referral_code || '',
   };
 }
 
@@ -103,7 +104,7 @@ export function AuthProvider({ children }) {
     hydrateSession();
   }, []);
 
-  const signUp = async ({ fullName, email, phone, password, userType, otp }) => {
+  const signUp = async ({ fullName, email, phone, password, userType, otp, signupCode }) => {
     const payload = {
       name: fullName,
       email,
@@ -111,6 +112,7 @@ export function AuthProvider({ children }) {
       password,
       role: String(userType || 'customer').toUpperCase(),
       otp,
+      signupCode,
     };
 
     try {
@@ -132,7 +134,7 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const requestSignupOtp = async ({ fullName, email, phone, password, userType }) => {
+  const requestSignupOtp = async ({ fullName, email, phone, password, userType, signupCode }) => {
     try {
       await apiRequest('/auth/signup/request-otp', {
         method: 'POST',
@@ -142,6 +144,7 @@ export function AuthProvider({ children }) {
           phone,
           password,
           role: String(userType || 'customer').toUpperCase(),
+          signupCode,
         }),
       });
 
