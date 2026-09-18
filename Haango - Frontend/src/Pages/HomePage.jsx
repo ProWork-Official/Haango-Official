@@ -221,11 +221,11 @@ function HomePage({ onNavigate, onSelectActivity, onSelectBuddy }) {
   return (
     <div className="bg-[#fffaf5] text-[#102038] animate-fade-in">
       {/* ===== HERO ===== */}
-     <section className="relative overflow-hidden pt-24 sm:pt-20">
+     <section className="relative overflow-hidden pt-16 sm:pt-20">
   <div className="pointer-events-none absolute -right-20 top-10 h-72 w-72 rounded-full bg-[#e9f0ff] blur-3xl" />
   <div className="pointer-events-none absolute -left-20 bottom-0 h-64 w-64 rounded-full bg-[#fff0e3] blur-3xl" />
 
-  <div className="container-max pl-[2rem] relative flex min-h-[540px] items-center gap-6">
+  <div className="container-max px-[1rem] sm:pl-[2rem] relative flex min-h-[540px] items-center gap-6">
 
    
  {/* Left */}
@@ -478,7 +478,7 @@ function HomePage({ onNavigate, onSelectActivity, onSelectBuddy }) {
               No buddy available.
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-4 md:gap-5">
+            <div className="grid grid-cols sm:grid-cols-2 gap-4 md:grid-cols-4 md:gap-5">
               {featuredBuddies.map((buddy, i) => (
                 <BuddyCard
                   key={buddy.id}
@@ -610,9 +610,10 @@ function HomePage({ onNavigate, onSelectActivity, onSelectBuddy }) {
       </section>
 
       {/* ===== BECOME A BUDDY CTA ===== */}
-     <section className="container-max section-pad py-16 sm:py-20"> <div className="rounded-[2.5rem] bg-gradient-to-br from-[#fff0e3] to-[#fef5ed] p-8 sm:p-12 lg:p-16"> <div className="grid items-center gap-12 lg:grid-cols-[1fr_0.85fr] lg:gap-16">
+     <section className="container-max section-pad py-16 sm:py-20"> 
+      <div className="rounded-[2.5rem] bg-gradient-to-br from-[#fff0e3] to-[#fef5ed] p-4 sm:p-12 lg:p-16"> <div className="grid items-center gap-12 lg:grid-cols-[1fr_0.85fr] lg:gap-16">
   {/* Left */}
-  <div className="max-w-2xl">
+  <div className="max-w-2xl p-8">
     <h2 className="font-display text-3xl font-extrabold tracking-tight sm:text-4xl">
       Got good vibes to share?
     </h2>

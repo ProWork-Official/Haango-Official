@@ -36,10 +36,18 @@ function getGreetingByTime() {
   return 'Good night';
 }
 
+function getInitials(name = '') {
+  return name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0].toUpperCase())
+    .join('');
+}
+
 const demoBuddy = {
   name: 'Aarav Sharma',
-  image:
-    'https://images.pexels.com/photos/6338266/pexels-photo-6338266.jpeg?auto=compress&cs=tinysrgb&h=800&w=600',
   rating: 0,
   profileCompletion: 88,
 };
@@ -531,7 +539,7 @@ export default function BuddyDashboardPage({ onNavigate }) {
     name: buddyProfile?.displayName || authProfile?.full_name || demoBuddy.name,
     rating: Number(buddyProfile?.rating ?? 0),
     profileCompletion: Number(buddyProfile?.profileCompletion || 0),
-    image: buddyProfile?.profileImages?.[0] || demoBuddy.image,
+    image: buddyProfile?.profileImages?.[0] || '',
   };
 
   const upcomingBookings = useMemo(() => {
@@ -617,12 +625,21 @@ export default function BuddyDashboardPage({ onNavigate }) {
   return (
     <div className="pt-16 md:pt-18 animate-fade-in min-h-screen pb-20 md:pb-8">
       <div className="container-max section-pad py-8">
-        <div className="flex items-center gap-3 mb-8">
-          <img
-            src={demoBuddy.image}
-            alt={demoBuddy.name}
-            className="w-12 h-12 rounded-2xl object-cover"
-          />
+        <div className="flex items-center flex-wrap gap-3 mb-8">
+          {activeBuddy.image ? (
+            <img
+              src={activeBuddy.image}
+              alt={activeBuddy.name}
+              className="w-12 h-12 rounded-2xl object-cover"
+            />
+          ) : (
+            <div
+              className="w-12 h-12 rounded-2xl bg-coral-100 text-coral-700 flex items-center justify-center font-display font-bold"
+              aria-label={`${activeBuddy.name} initials`}
+            >
+              {getInitials(activeBuddy.name)}
+            </div>
+          )}
 
           <div>
             <h1 className="font-display font-extrabold text-2xl sm:text-3xl text-ink-900 tracking-tight">
@@ -702,9 +719,9 @@ export default function BuddyDashboardPage({ onNavigate }) {
           </div>
         ) : (
           <div className="mb-8 flex flex-wrap items-center gap-3">
-            <button type="button" onClick={() => setEditingPanel('profile')} className="btn-secondary">Update buddy details</button>
-            <button type="button" onClick={() => setEditingPanel('payout')} className="btn-secondary">Update bank detail</button>
-            <label className="ml-auto inline-flex cursor-pointer items-center gap-3 text-sm font-semibold text-ink-700">
+            <button type="button" onClick={() => setEditingPanel('profile')} className="btn-secondary w-full sm:w-auto">Update buddy details</button>
+              <button type="button" onClick={() => setEditingPanel('payout')} className="btn-secondary w-full sm:w-auto">Update bank detail</button>
+            <label className="ml-0 inline-flex w-full cursor-pointer items-center justify-between gap-3 text-sm font-semibold text-ink-700 sm:ml-auto sm:w-auto">
               <span>Show me in Explore</span>
               <input
                 type="checkbox"
@@ -713,7 +730,7 @@ export default function BuddyDashboardPage({ onNavigate }) {
                 disabled={visibilitySaving}
                 onChange={(event) => updateExploreVisibility(event.target.checked)}
               />
-              <span className="relative h-6 w-11 rounded-full bg-ink-200 transition peer-checked:bg-coral-500 after:absolute after:left-1 after:top-1 after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow-sm after:transition peer-checked:after:translate-x-5" />
+                <span className="relative h-6 w-11 rounded-full bg-red-500 transition peer-checked:bg-green-500 after:absolute after:left-1 after:top-1 after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow-sm after:transition peer-checked:after:translate-x-5" />
             </label>
           </div>
         )}

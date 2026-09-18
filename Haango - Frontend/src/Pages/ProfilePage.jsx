@@ -141,7 +141,7 @@ export default function ProfilePage({
       </button>
 
       {/* Gallery */}
-      <div className="relative h-72 md:h-96 overflow-hidden rounded-b-4xl">
+      <div className="relative h-[28rem] sm:mx-auto sm:w-[375px] sm:rounded-3xl md:h-96 overflow-hidden ">
         <img
           src={buddy.gallery[activeImage]}
           alt={buddy.name}

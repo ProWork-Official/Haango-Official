@@ -70,16 +70,24 @@ export function AuthProvider({ children }) {
   const hydrateSession = async () => {
     try {
       const storedToken = localStorage.getItem('haango_access_token');
-      if (!storedToken) {
-        setSession(null);
-        setProfile(null);
-        setLoading(false);
-        return;
+      let activeToken = storedToken;
+      let userPayload;
+
+      try {
+        if (!storedToken) throw new Error('No local access token');
+        userPayload = await apiRequest('/auth/me');
+      } catch (error) {
+        const refreshed = await apiRequest('/auth/refresh', { method: 'POST' });
+        activeToken = refreshed?.token || refreshed?.accessToken;
+
+        if (!activeToken) throw error;
+
+        storeAccessToken(activeToken);
+        userPayload = refreshed;
       }
 
-      const userPayload = await apiRequest('/auth/me');
       const nextProfile = normalizeProfile(userPayload?.user || userPayload);
-      setSession({ user: { id: nextProfile?.id }, token: storedToken });
+      setSession({ user: { id: nextProfile?.id }, token: activeToken });
       setProfile(nextProfile);
     } catch (error) {
       console.warn('Session restore failed:', error.message);

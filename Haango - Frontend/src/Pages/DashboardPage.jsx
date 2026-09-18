@@ -200,7 +200,7 @@ export default function DashboardPage({ onNavigate, onSelectBuddy, onMessage }) 
 
           <div className="flex flex-wrap items-center gap-3">
             {isCompanionUser && (
-              <button className="btn-secondary" onClick={() => onNavigate('buddy-dashboard')}>
+              <button className="btn-secondary w-full sm:w-auto" onClick={() => onNavigate('buddy-dashboard')}>
                 Open buddy dashboard
                 <ChevronRight size={16} />
               </button>
@@ -233,7 +233,7 @@ export default function DashboardPage({ onNavigate, onSelectBuddy, onMessage }) 
                 <span className="text-xs text-ink-400">{likedBuddies.length} saved</span>
               </div>
               {likedBuddies.length ? (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols sm:grid-cols-2 gap-3">
                   {likedBuddies.map((buddy) => (
                     <BuddyCard
                       key={buddy._id}

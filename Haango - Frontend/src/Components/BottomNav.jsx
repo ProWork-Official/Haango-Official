@@ -9,9 +9,9 @@ import {
 const items = [
   { id: 'home', label: 'Home', icon: Home },
   { id: 'explore', label: 'Explore', icon: Compass },
-  { id: 'dashboard', label: 'Bookings', icon: CalendarDays },
+  { id: 'bookings', label: 'Bookings', icon: CalendarDays },
   { id: 'messages', label: 'Messages', icon: MessageCircle },
-  { id: 'profile', label: 'Profile', icon: User },
+  { id: 'dashboard', label: 'Profile', icon: User },
 ];
 
 export default function BottomNav({ current, onNavigate }) {

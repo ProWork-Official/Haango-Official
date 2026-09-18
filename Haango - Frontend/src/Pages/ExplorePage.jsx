@@ -350,7 +350,7 @@ const ExplorePage = ({ onSelectBuddy }) => {
             action={{ label: 'Clear filters', onClick: clearFilters }}
           />
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-5">
+          <div className="grid grid-cols sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-5">
             {filtered.map((buddy, index) => (
               <BuddyCard
                 key={buddy.id}
