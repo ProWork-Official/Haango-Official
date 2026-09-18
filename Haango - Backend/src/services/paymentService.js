@@ -4,6 +4,10 @@ import { env } from '../config/environment.js';
 import Booking from '../models/Booking.js';
 import { badRequest, notFound } from '../utils/errors.js';
 import { recordAdminAction } from './adminAuditService.js';
+import { ensureCustomerWallet, debitWallet, creditWallet } from './customerWalletService.js';
+import { rewardReferrerForFirstBooking } from './referralService.js';
+import User from '../models/User.js';
+import { redeemCoupon } from './couponService.js';
 
 export function isRazorpayConfigured() {
   return !!(env.razorpayKeyId && env.razorpayKeySecret);
@@ -21,12 +25,31 @@ function getRazorpayClient() {
 }
 
 export async function createOrder(booking) {
-  const razorpay = getRazorpayClient();
   if (booking.paymentStatus === 'PAID') {
     throw badRequest('Booking has already been paid', 'BOOKING_ALREADY_PAID');
   }
+  const wallet = await ensureCustomerWallet(booking.customerId);
+  const walletAmount = Math.min(wallet.balance, booking.totalAmount - Number(booking.couponDiscount || 0));
+  const amountDue = Math.max(0, booking.totalAmount - Number(booking.couponDiscount || 0) - walletAmount);
+  booking.walletAmount = walletAmount;
+  booking.amountDue = amountDue;
+  booking.walletDebitReference = `booking-payment-${booking._id}`;
+
+  if (amountDue === 0) {
+    if (walletAmount > 0) {
+      await debitWallet(booking.customerId, walletAmount, 'BOOKING_PAYMENT', booking.walletDebitReference, { bookingId: booking._id, description: 'Wallet payment for booking' });
+    }
+    booking.paymentStatus = 'PAID';
+    booking.bookingStatus = 'CONFIRMED';
+    await booking.save();
+    if (booking.couponCode) await redeemCoupon(booking.couponCode, await User.findById(booking.customerId), 'BOOKING', { bookingId: booking._id, totalAmount: booking.totalAmount });
+    await rewardReferrerForFirstBooking(booking);
+    return { walletOnly: true, amount: 0, currency: 'INR', booking };
+  }
+
+  const razorpay = getRazorpayClient();
   const order = await razorpay.orders.create({
-    amount: Math.round(booking.totalAmount * 100),
+    amount: Math.round(amountDue * 100),
     currency: 'INR',
     receipt: booking.bookingId,
     notes: { bookingId: String(booking._id) },
@@ -88,36 +111,40 @@ export async function verifyPayment(paymentData, customerId) {
     throw badRequest('Payment has not been captured', 'PAYMENT_NOT_CAPTURED');
   }
 
+  if (booking.walletAmount > 0) {
+    await debitWallet(booking.customerId, booking.walletAmount, 'BOOKING_PAYMENT', booking.walletDebitReference || `booking-payment-${booking._id}`, { bookingId: booking._id, description: 'Wallet portion of booking payment' });
+  }
   booking.paymentStatus = 'PAID';
   booking.bookingStatus = 'CONFIRMED';
   booking.razorpayPaymentId = paymentId;
   booking.razorpaySignature = signature;
   await booking.save();
+  if (booking.couponCode) await redeemCoupon(booking.couponCode, await User.findById(booking.customerId), 'BOOKING', { bookingId: booking._id, totalAmount: booking.totalAmount });
+  await rewardReferrerForFirstBooking(booking);
   return booking;
 }
 
 export async function refundPayment(bookingId, customerId, actor, request) {
-  const razorpay = getRazorpayClient();
   const booking = await Booking.findById(bookingId);
   if (!booking || String(booking.customerId) !== String(customerId)) throw notFound('Booking not found');
   if (booking.paymentStatus === 'REFUNDED') {
     return booking;
   }
-  if (booking.paymentStatus !== 'PAID' || !booking.razorpayPaymentId) {
-    throw badRequest('This booking has no captured Razorpay payment to refund', 'PAYMENT_NOT_REFUNDABLE');
+  if (booking.paymentStatus !== 'PAID') {
+    throw badRequest('This booking has no captured payment to refund', 'PAYMENT_NOT_REFUNDABLE');
   }
   if (['COMPLETED', 'CANCELLED', 'REJECTED'].includes(booking.bookingStatus)) {
     throw badRequest('Booking cannot be refunded', 'INVALID_STATUS');
   }
 
-  await razorpay.payments.refund(booking.razorpayPaymentId, {
-    amount: Math.round(booking.totalAmount * 100),
-  });
+  const creditAmount = Math.max(0, Number(booking.totalAmount || 0) - Number(booking.couponDiscount || 0));
+  await creditWallet(customerId, creditAmount, 'CANCELLATION_CREDIT', `cancellation-credit-${booking._id}`, { bookingId: booking._id, description: 'Wallet credit from cancelled paid booking' });
   booking.paymentStatus = 'REFUNDED';
+  booking.walletCreditAmount = creditAmount;
   booking.bookingStatus = 'CANCELLED';
   if (booking.meeting) booking.meeting.locations = [];
   await booking.save();
-  await recordAdminAction({ actor, request, action: 'REFUND', targetType: 'Booking', targetId: booking._id, metadata: { amount: booking.totalAmount, paymentStatus: 'REFUNDED' } });
+  await recordAdminAction({ actor, request, action: 'WALLET_CREDIT', targetType: 'Booking', targetId: booking._id, metadata: { amount: creditAmount, paymentStatus: 'REFUNDED' } });
   return booking;
 }
 
@@ -140,6 +167,11 @@ export async function handleWebhook(body, signature, rawBody) {
     booking.paymentStatus = 'PAID';
     booking.bookingStatus = 'CONFIRMED';
     booking.razorpayPaymentId = paymentEntity.id || booking.razorpayPaymentId;
+    if (booking.walletAmount > 0) {
+      await debitWallet(booking.customerId, booking.walletAmount, 'BOOKING_PAYMENT', booking.walletDebitReference || `booking-payment-${booking._id}`, { bookingId: booking._id, description: 'Wallet portion of booking payment' });
+    }
+    if (booking.couponCode) await redeemCoupon(booking.couponCode, await User.findById(booking.customerId), 'BOOKING', { bookingId: booking._id, totalAmount: booking.totalAmount });
+    await rewardReferrerForFirstBooking(booking);
   } else if (event === 'payment.failed') {
     booking.paymentStatus = 'FAILED';
   } else if (event === 'refund.processed') {

@@ -15,6 +15,12 @@ const bookingSchema = new mongoose.Schema(
     buddyRate: { type: Number, required: true, min: 0 },
     platformFee: { type: Number, required: true, min: 0 },
     totalAmount: { type: Number, required: true, min: 0 },
+    couponCode: { type: String, trim: true, uppercase: true, default: '' },
+    couponDiscount: { type: Number, min: 0, default: 0 },
+    walletAmount: { type: Number, min: 0, default: 0 },
+    amountDue: { type: Number, min: 0, default: 0 },
+    walletDebitReference: { type: String, trim: true, default: '' },
+    walletCreditAmount: { type: Number, min: 0, default: 0 },
     paymentStatus: {
       type: String,
       enum: ['PENDING', 'PAID', 'FAILED', 'REFUNDED', 'PARTIALLY_REFUNDED'],

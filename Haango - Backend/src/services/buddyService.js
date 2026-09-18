@@ -1,6 +1,7 @@
 import BuddyProfile from '../models/BuddyProfile.js';
 import User from '../models/User.js';
 import { notFound, badRequest } from '../utils/errors.js';
+import { ensureEarlyStarterBonus } from './bonusService.js';
 
 function getAgeFromDate(date) {
   if (!date) return null;
@@ -202,6 +203,7 @@ export async function createBuddyProfile(userId, data) {
     profile.showOnFindCompanions = true;
   }
   await profile.save();
+  await ensureEarlyStarterBonus(userId);
   return profile;
 }
 
@@ -231,6 +233,7 @@ export async function updateBuddyProfile(userId, updates) {
     if (cleanUpdates.profileImages.length < 2) {
       throw badRequest('Upload at least 2 photos for your buddy profile', 'BUDDY_PHOTOS_REQUIRED');
     }
+    cleanUpdates.gallery = cleanUpdates.profileImages;
   }
 
   if (cleanUpdates.girlsOnly && cleanUpdates.gender && cleanUpdates.gender !== 'FEMALE') {

@@ -5,6 +5,7 @@ export const signupValidator = [
   body('email').isEmail().normalizeEmail().withMessage('Valid email required'),
   body('phone').matches(/^\+?[\d\s-]{10,15}$/).withMessage('Valid phone number required'),
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+  body('signupCode').optional().trim().isLength({ max: 50 }),
   body('role').isIn(['CUSTOMER', 'BUDDY']).withMessage('Role must be CUSTOMER or BUDDY'),
 ];
 

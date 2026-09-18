@@ -3,7 +3,8 @@ import { success } from '../utils/response.js';
 
 export async function getWallet(req, res, next) {
   try {
-    res.json(success(await walletService.getWalletSummary(req.user._id)));
+    const period = ['month', '3m', '6m', '1y'].includes(req.query.period) ? req.query.period : 'month';
+    res.json(success(await walletService.getWalletSummary(req.user._id, period)));
   } catch (err) {
     next(err);
   }

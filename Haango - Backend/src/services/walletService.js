@@ -2,12 +2,14 @@ import crypto from 'node:crypto';
 import Booking from '../models/Booking.js';
 import Wallet from '../models/Wallet.js';
 import Withdrawal from '../models/Withdrawal.js';
+import WalletBonus from '../models/WalletBonus.js';
+import { getBonusStatus, ensureEarlyStarterBonus } from './bonusService.js';
 import User from '../models/User.js';
 import { env } from '../config/environment.js';
 import { badRequest, forbidden, notFound } from '../utils/errors.js';
 import { recordAdminAction } from './adminAuditService.js';
 
-const MIN_WITHDRAWAL = 100;
+const MIN_WITHDRAWAL = 300;
 const ACTIVE_WITHDRAWAL_STATUSES = ['PENDING', 'PROCESSING', 'PAID'];
 
 function assertRazorpayXConfigured() {
@@ -64,16 +66,23 @@ async function getWalletDocument(userId) {
   return Wallet.findOne({ userId }).select('+accountNumber');
 }
 
-async function getEarnings(userId) {
-  const [earningsResult, withdrawalsResult] = await Promise.all([
+function getPeriodStart(period = 'month') {
+  const start = new Date();
+  if (period === '3m') start.setMonth(start.getMonth() - 3);
+  else if (period === '6m') start.setMonth(start.getMonth() - 6);
+  else if (period === '1y') start.setFullYear(start.getFullYear() - 1);
+  else start.setDate(1);
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
+
+async function getEarnings(userId, period = 'month') {
+  const periodStart = getPeriodStart(period);
+  await ensureEarlyStarterBonus(userId);
+
+  const [earningsResult, allTimeEarningsResult, withdrawalsResult, bonusResult, completionResult] = await Promise.all([
     Booking.aggregate([
-      {
-        $match: {
-          buddyId: userId,
-          paymentStatus: 'PAID',
-          bookingStatus: 'COMPLETED',
-        },
-      },
+      { $match: { buddyId: userId, paymentStatus: 'PAID', bookingStatus: 'COMPLETED', updatedAt: { $gte: periodStart } } },
       {
         $group: {
           _id: null,
@@ -81,33 +90,55 @@ async function getEarnings(userId) {
         },
       },
     ]),
+    Booking.aggregate([
+      { $match: { buddyId: userId, paymentStatus: 'PAID', bookingStatus: 'COMPLETED' } },
+      { $group: { _id: null, totalEarned: { $sum: { $multiply: [{ $multiply: ['$buddyRate', '$duration'] }, 0.8] } } } },
+    ]),
     Withdrawal.aggregate([
       { $match: { userId, status: { $in: ACTIVE_WITHDRAWAL_STATUSES } } },
       { $group: { _id: null, totalWithdrawn: { $sum: '$amount' } } },
     ]),
+    WalletBonus.aggregate([{ $match: { userId, createdAt: { $gte: periodStart } } }, { $group: { _id: null, totalBonus: { $sum: '$amount' } } }]),
+    Booking.aggregate([
+      { $match: { buddyId: userId, bookingStatus: { $in: ['COMPLETED', 'CANCELLED', 'REJECTED'] } } },
+      { $group: { _id: null, completed: { $sum: { $cond: [{ $eq: ['$bookingStatus', 'COMPLETED'] }, 1, 0] } }, total: { $sum: 1 } } },
+    ]),
   ]);
 
-  const totalEarned = earningsResult[0]?.totalEarned || 0;
+  const earnedThisPeriodFromBookings = earningsResult[0]?.totalEarned || 0;
+  const earnedFromBookings = allTimeEarningsResult[0]?.totalEarned || 0;
+  const totalBonus = bonusResult[0]?.totalBonus || 0;
+  const totalEarned = earnedFromBookings + totalBonus;
   const totalWithdrawn = withdrawalsResult[0]?.totalWithdrawn || 0;
+  const completedMeetings = completionResult[0]?.completed || 0;
+  const decidedBookings = completionResult[0]?.total || 0;
   return {
     totalEarned,
+    earnedThisPeriod: earnedThisPeriodFromBookings + totalBonus,
     totalWithdrawn,
     availableBalance: Math.max(0, totalEarned - totalWithdrawn),
+    completionRate: completedMeetings > 0 && decidedBookings > 0
+      ? Math.round((completedMeetings / decidedBookings) * 100)
+      : 0,
+    period,
+    periodStart,
   };
 }
 
-export async function getWalletSummary(userId) {
+export async function getWalletSummary(userId, period = 'month') {
   const [wallet, earnings, withdrawals] = await Promise.all([
     getWalletDocument(userId),
-    getEarnings(userId),
+    getEarnings(userId, period),
     Withdrawal.find({ userId }).sort({ createdAt: -1 }).limit(20),
   ]);
+  const bonus = await getBonusStatus(userId);
 
   return {
     wallet: toSafeWallet(wallet),
     ...earnings,
     withdrawals,
     minimumWithdrawal: MIN_WITHDRAWAL,
+    bonus,
   };
 }
 

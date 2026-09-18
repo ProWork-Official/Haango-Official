@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import * as adminController from '../controllers/adminController.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import * as couponController from '../controllers/couponController.js';
 
 const router = Router();
 
@@ -29,5 +30,8 @@ router.get('/reviews', adminController.getReviews);
 router.delete('/reviews/:id', adminController.deleteReview);
 router.get('/cancellation-requests', adminController.getCancellationRequests);
 router.patch('/cancellation-requests/:id', adminController.reviewCancellation);
+router.get('/coupons', couponController.list);
+router.post('/coupons', couponController.create);
+router.delete('/coupons/:id', couponController.remove);
 
 export default router;

@@ -7,6 +7,30 @@ import { env } from '../config/environment.js';
 import { badRequest, unauthorized } from '../utils/errors.js';
 import { normalizeEmail } from '../utils/helpers.js';
 import { sendOtpEmail, sendPasswordResetEmail } from './emailService.js';
+import { ensureCustomerWallet } from './customerWalletService.js';
+import { redeemCoupon } from './couponService.js';
+import { findAvailableCoupon } from './couponService.js';
+import mongoose from 'mongoose';
+
+function makeReferralCode(name = '') {
+  const prefix = String(name).replace(/[^a-z0-9]/gi, '').slice(0, 4).toUpperCase() || 'USER';
+  return `${prefix}${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+}
+
+async function createReferralCode() {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const code = makeReferralCode('USER');
+    if (!await User.exists({ referralCode: code })) return code;
+  }
+  throw badRequest('Unable to create a referral code. Please try again.', 'REFERRAL_CODE_ERROR');
+}
+
+export async function ensureReferralCode(user) {
+  if (user.referralCode) return user;
+  user.referralCode = await createReferralCode();
+  await user.save();
+  return user;
+}
 
 function signToken(userId, secret = env.jwtSecret, expiresIn = env.jwtExpiresIn) {
   return jwt.sign({ userId }, secret, { expiresIn });
@@ -114,7 +138,7 @@ export function issueAuthCookies(res, accessToken, refreshToken) {
   });
 }
 
-export async function requestSignupOtp({ name, email, phone, password, role }) {
+export async function requestSignupOtp({ name, email, phone, password, role, signupCode }) {
   const finalEmail = normalizeEmail(email);
   const finalRole = normalizeRole(role);
 
@@ -152,7 +176,7 @@ export async function requestSignupOtp({ name, email, phone, password, role }) {
   };
 }
 
-export async function signupUser({ name, email, phone, password, role, otp }) {
+export async function signupUser({ name, email, phone, password, role, otp, signupCode, referralCode, couponCode }) {
   const finalEmail = normalizeEmail(email);
   const finalRole = normalizeRole(role);
 
@@ -177,6 +201,12 @@ export async function signupUser({ name, email, phone, password, role, otp }) {
   }
 
   const passwordHash = await User.hashPassword(password);
+  const normalizedSignupCode = String(signupCode || referralCode || couponCode || '').trim().toUpperCase();
+  const normalizedReferralCode = normalizedSignupCode;
+  const referrer = normalizedReferralCode ? await User.findOne({ referralCode: normalizedReferralCode }) : null;
+  if (normalizedSignupCode && !referrer) {
+    await findAvailableCoupon(normalizedSignupCode, { _id: new mongoose.Types.ObjectId(), role: finalRole }, 'SIGNUP');
+  }
   const user = await User.create({
     name,
     email: finalEmail,
@@ -184,7 +214,14 @@ export async function signupUser({ name, email, phone, password, role, otp }) {
     passwordHash,
     role: finalRole,
     isBuddy: finalRole === 'BUDDY',
+    referralCode: await createReferralCode(),
+    referredBy: referrer?._id || null,
+    signupCouponCode: referrer ? '' : normalizedSignupCode,
   });
+  await ensureCustomerWallet(user._id);
+  if (!referrer && normalizedSignupCode) {
+    await redeemCoupon(normalizedSignupCode, user, 'SIGNUP');
+  }
   otpRequest.consumedAt = new Date();
   await otpRequest.save();
 
@@ -275,6 +312,7 @@ export async function loginUser(email, password, otp = null) {
     await otpRequest.save();
   }
 
+  await ensureReferralCode(user);
   user.lastSeenAt = new Date();
   user.requiresOtpReauth = false;
   await user.save();

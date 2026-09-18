@@ -8,16 +8,17 @@ import {
   refreshUserSession,
   logoutUser,
   issueAuthCookies,
+  ensureReferralCode,
 } from '../services/authService.js';
 import { success } from '../utils/response.js';
 import { badRequest } from '../utils/errors.js';
 
 export async function sendSignupOtp(req, res, next) {
   try {
-    const { name, email, phone, password, role } = req.body;
+    const { name, email, phone, password, role, signupCode } = req.body;
     if (role === 'ADMIN') throw badRequest('Cannot self-register as admin', 'INVALID_ROLE');
 
-    const result = await requestSignupOtp({ name, email, phone, password, role });
+    const result = await requestSignupOtp({ name, email, phone, password, role, signupCode });
     res.json(success({ ...result }));
   } catch (err) {
     next(err);
@@ -26,9 +27,9 @@ export async function sendSignupOtp(req, res, next) {
 
 export async function signup(req, res, next) {
   try {
-    const { name, email, phone, password, role, otp } = req.body;
+    const { name, email, phone, password, role, otp, signupCode } = req.body;
     if (role === 'ADMIN') throw badRequest('Cannot self-register as admin', 'INVALID_ROLE');
-    const { user, accessToken, refreshToken } = await signupUser({ name, email, phone, password, role, otp });
+    const { user, accessToken, refreshToken } = await signupUser({ name, email, phone, password, role, otp, signupCode });
     issueAuthCookies(res, accessToken, refreshToken);
     res.status(201).json(success({ user: user.toSafeObject(), token: accessToken, refreshToken }));
   } catch (err) {
@@ -104,7 +105,8 @@ export async function resetPassword(req, res, next) {
 
 export async function me(req, res, next) {
   try {
-    res.json(success({ user: req.user.toSafeObject() }));
+    const user = await ensureReferralCode(req.user);
+    res.json(success({ user: user.toSafeObject() }));
   } catch (err) {
     next(err);
   }

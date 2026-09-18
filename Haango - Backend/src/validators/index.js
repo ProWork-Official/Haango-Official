@@ -8,6 +8,7 @@ export const createBookingValidator = [
   body('duration').isInt({ min: 1, max: 8 }).withMessage('Duration must be 1-8 hours'),
   body('meetingLocation').trim().isLength({ min: 2, max: 200 }).withMessage('Meeting location required'),
   body('customerNotes').optional().trim().isLength({ max: 1000 }),
+  body('couponCode').optional().trim().isLength({ max: 50 }),
 ];
 
 export const createReviewValidator = [

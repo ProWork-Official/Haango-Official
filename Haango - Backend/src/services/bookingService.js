@@ -12,6 +12,8 @@ import User from '../models/User.js';
 import { sendOtpEmail } from './emailService.js';
 import LocationAccessLog from '../models/LocationAccessLog.js';
 import { recordAdminAction } from './adminAuditService.js';
+import { creditWallet } from './customerWalletService.js';
+import { findAvailableCoupon } from './couponService.js';
 
 const LOCATION_RETENTION_MS = 24 * 60 * 60 * 1000;
 const LOCATION_STALE_MS = 2 * 60 * 1000;
@@ -76,6 +78,11 @@ export async function createBooking(customerId, data) {
   if (conflicting) throw conflict('Buddy already booked for this time slot', 'DOUBLE_BOOKING');
 
   const { buddyRate, buddyFee, platformFee, totalAmount } = calculateBookingPrice(buddy.hourlyRate, data.duration);
+  const customer = await User.findById(customerId);
+  const coupon = data.couponCode
+    ? await findAvailableCoupon(data.couponCode, customer, 'BOOKING')
+    : null;
+  const couponDiscount = coupon ? Math.min(coupon.coupon.amount, totalAmount) : 0;
 
   const booking = await Booking.create({
     bookingId: generateBookingId(),
@@ -91,6 +98,9 @@ export async function createBooking(customerId, data) {
     buddyRate,
     platformFee,
     totalAmount,
+    amountDue: totalAmount,
+    couponCode: String(data.couponCode || '').trim().toUpperCase(),
+    couponDiscount,
     customerNotes: data.customerNotes || '',
     paymentStatus: 'PENDING',
     bookingStatus: 'PENDING',
@@ -242,7 +252,17 @@ export async function reviewCancellation(requestId, adminId, status, adminNotes 
   if (!request) throw notFound('Cancellation request not found');
   if (!['APPROVED', 'REJECTED', 'CANCELLED'].includes(status)) throw badRequest('Invalid cancellation decision');
   request.status = status; request.adminNotes = adminNotes; request.reviewedBy = adminId; request.reviewedAt = new Date();
-  if (status === 'APPROVED') { request.bookingId.bookingStatus = 'CANCELLED'; clearBookingLocations(request.bookingId); await request.bookingId.save(); }
+  if (status === 'APPROVED') {
+    request.bookingId.bookingStatus = 'CANCELLED';
+    clearBookingLocations(request.bookingId);
+    if (request.bookingId.paymentStatus === 'PAID') {
+      const creditAmount = Math.max(0, Number(request.bookingId.totalAmount || 0) - Number(request.bookingId.couponDiscount || 0));
+      await creditWallet(request.bookingId.customerId, creditAmount, 'CANCELLATION_CREDIT', `cancellation-credit-${request.bookingId._id}`, { bookingId: request.bookingId._id, description: 'Wallet credit from approved cancelled booking' });
+      request.bookingId.paymentStatus = 'REFUNDED';
+      request.bookingId.walletCreditAmount = creditAmount;
+    }
+    await request.bookingId.save();
+  }
   await request.save();
   await recordAdminAction({ actor: await User.findById(adminId), request: requestContext, action: 'CANCELLATION_DECISION', targetType: 'CancellationRequest', targetId: request._id, metadata: { status, bookingId: request.bookingId._id } });
   return request;

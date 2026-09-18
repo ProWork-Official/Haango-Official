@@ -57,10 +57,10 @@ const buddyProfileSchema = new mongoose.Schema(
 buddyProfileSchema.methods.toPublicObject = function toPublicObject() {
   const profile = this.toObject();
   const user = profile.userId && typeof profile.userId === 'object' ? profile.userId : null;
-  const gallery = Array.isArray(profile.gallery) && profile.gallery.length
-    ? profile.gallery
-    : Array.isArray(profile.profileImages) && profile.profileImages.length
-      ? profile.profileImages
+  const gallery = Array.isArray(profile.profileImages) && profile.profileImages.length
+    ? profile.profileImages
+    : Array.isArray(profile.gallery) && profile.gallery.length
+      ? profile.gallery
       : (user?.profileImage ? [user.profileImage] : []);
   const interests = Array.isArray(profile.interests) && profile.interests.length
     ? profile.interests
