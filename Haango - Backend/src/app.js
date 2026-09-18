@@ -28,6 +28,10 @@ import { getDbStatus } from './config/database.js';
 
 const app = express();
 
+const isLocalDevelopmentOrigin = (origin) => (
+  !env.isProduction && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
+);
+
 app.use(helmet());
 app.use(compression());
 
@@ -35,7 +39,9 @@ app.use(
   cors({
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
-      if (env.corsOrigins.includes(origin)) return callback(null, true);
+      if (env.corsOrigins.includes(origin) || isLocalDevelopmentOrigin(origin)) {
+        return callback(null, true);
+      }
       return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
