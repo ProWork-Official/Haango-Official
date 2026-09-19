@@ -193,8 +193,8 @@ export default function BuddyBookingsPage({ onBack, onMessage }) {
                     <button onClick={() => updateBooking(booking._id, 'accept')} disabled={updating} className="btn-primary text-sm">Accept booking</button>
                     <button onClick={() => updateBooking(booking._id, 'reject')} disabled={updating} className="btn-ghost text-sm">Reject</button>
                   </>}
-                  {booking.bookingStatus === 'CONFIRMED' && <button onClick={() => updateBooking(booking._id, 'start')} disabled={updating} className="btn-primary text-sm">Start plan</button>}
-                  {booking.bookingStatus === 'ONGOING' && <button onClick={() => updateBooking(booking._id, 'complete')} disabled={updating} className="btn-primary text-sm">Mark completed</button>}
+                  {booking.bookingStatus === 'CONFIRMED' && <button onClick={() => updateBooking(booking._id, 'start')} disabled={updating} className="btn-primary text-sm">Enter start OTP</button>}
+                  {booking.bookingStatus === 'ONGOING' && <button onClick={() => updateBooking(booking._id, 'complete')} disabled={updating} className="btn-primary text-sm">Enter end OTP</button>}
                 </div>
               </div>
             )) : <p className="text-sm text-ink-500">No bookings yet.</p>}

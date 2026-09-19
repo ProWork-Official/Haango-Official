@@ -100,6 +100,19 @@ export default function BookingsPage({ onBack, onMessage }) {
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    const refreshBookingStatuses = async () => {
+      try {
+        const nextBookings = await apiRequest('/bookings/my-bookings');
+        setBookings(nextBookings);
+      } catch (_) {
+        // Keep the current booking state when a background refresh is unavailable.
+      }
+    };
+    const interval = window.setInterval(refreshBookingStatuses, 15000);
+    return () => window.clearInterval(interval);
+  }, []);
+
   const groupedBookings = useMemo(() => {
     return {
       upcoming: bookings.filter((booking) => new Date(booking.date).getTime() >= currentTime && !['CANCELLED', 'REJECTED'].includes(booking.bookingStatus)),
@@ -441,9 +454,56 @@ export default function BookingsPage({ onBack, onMessage }) {
           </div>
         )}
 
+        {openLocationMap === booking._id && (
+          <LiveLocationMap
+            locations={locations[booking._id]}
+            onClose={() => {
+              if (locationWatches.current[booking._id]) {
+                navigator.geolocation.clearWatch(locationWatches.current[booking._id]);
+                delete locationWatches.current[booking._id];
+              }
+              setOpenLocationMap(null);
+            }}
+            onRefresh={async () => {
+              const refreshed = await apiRequest(`/bookings/${booking._id}/locations`);
+              setLocations((current) => ({ ...current, [booking._id]: refreshed }));
+            }}
+          />
+        )}
+
+        {booking.bookingStatus === 'CONFIRMED' && (
+          <div className="mt-5 flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => !startOtpLocked && verifyMeeting(booking, 'START')}
+              disabled={startOtpLocked}
+              className="btn-primary w-full text-sm disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+            >
+              {startOtpLocked ? 'Start OTP unlocks 1 hour before meeting' : 'Show start OTP'}
+            </button>
+            {meetingOtp?.bookingId === booking._id && meetingOtp.phase === 'START' && (
+              <div className="flex items-center gap-3 rounded-xl border border-coral-200 bg-coral-50 px-3 py-2">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-coral-700">Start code</p>
+                  <p className="font-mono text-lg font-extrabold tracking-[0.2em] text-coral-700">{meetingOtp.code}</p>
+                </div>
+                <button onClick={() => setMeetingOtp(null)} className="text-xs font-semibold text-coral-700 hover:text-coral-900">Close</button>
+              </div>
+            )}
+          </div>
+        )}
+
         {booking.bookingStatus === 'ONGOING' && (
           <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
             <button onClick={() => verifyMeeting(booking, 'END')} className="btn-primary text-sm">Show end OTP to companion</button>
+            {meetingOtp?.bookingId === booking._id && meetingOtp.phase === 'END' && (
+              <div className="flex items-center gap-3 rounded-xl border border-coral-200 bg-coral-50 px-3 py-2">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-coral-700">End code</p>
+                  <p className="font-mono text-lg font-extrabold tracking-[0.2em] text-coral-700">{meetingOtp.code}</p>
+                </div>
+                <button onClick={() => setMeetingOtp(null)} className="text-xs font-semibold text-coral-700 hover:text-coral-900">Close</button>
+              </div>
+            )}
             <button onClick={() => extendMeeting(booking)} className="btn-ghost text-sm">Extend after original end</button>
           </div>
         )}
@@ -467,15 +527,6 @@ export default function BookingsPage({ onBack, onMessage }) {
         {error && <p className="mt-5 rounded-2xl bg-error-50 p-4 text-sm text-error-600">{error}</p>}
         {reviewError && <p className="mt-5 rounded-2xl bg-amber-50 p-4 text-sm text-amber-700">{reviewError}</p>}
         {locationMessage && <p className="mt-5 rounded-2xl bg-sky-50 p-4 text-sm text-sky-700">{locationMessage}</p>}
-        {meetingOtp && (
-          <div className="mt-5 rounded-2xl border border-coral-200 bg-coral-50 p-5">
-            <h2 className="font-display text-lg font-bold text-ink-900">{meetingOtp.phase === 'START' ? 'Meeting start code' : 'Meeting end code'}</h2>
-            <p className="mt-1 text-sm text-ink-600">Tell this code to your companion. They will enter it from their bookings dashboard.</p>
-            <p className="mt-4 text-3xl font-extrabold tracking-[0.35em] text-coral-600">{meetingOtp.code}</p>
-            <p className="mt-2 text-xs text-ink-500">This code expires in 10 minutes.</p>
-            <button onClick={() => setMeetingOtp(null)} className="mt-4 btn-ghost text-sm">Close</button>
-          </div>
-        )}
         {loading ? <p className="mt-8 text-ink-500">Loading bookings...</p> : (
           <div className="mt-8 space-y-10">
             <section><h2 className="mb-4 font-display text-xl font-bold text-ink-900">Upcoming</h2><div className="space-y-4">{groupedBookings.upcoming.length ? groupedBookings.upcoming.map(renderBooking) : <p className="text-sm text-ink-500">No upcoming bookings.</p>}</div></section>

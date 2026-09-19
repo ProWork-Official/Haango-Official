@@ -34,7 +34,9 @@ export default function LiveLocationMap({ locations, onClose, onRefresh }) {
   const mapElement = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef([]);
+  const directionsRendererRef = useRef(null);
   const [mapError, setMapError] = useState('');
+  const [routeInfo, setRouteInfo] = useState(null);
 
   useEffect(() => {
     if (!onRefresh) return undefined;
@@ -75,6 +77,37 @@ export default function LiveLocationMap({ locations, onClose, onRefresh }) {
       locations.forEach((location) => bounds.extend({ lat: Number(location.latitude), lng: Number(location.longitude) }));
       mapRef.current.fitBounds(bounds, 80);
       if (locations.length === 1) mapRef.current.setZoom(15);
+
+      if (locations.length >= 2) {
+        const currentLocation = locations.find((location) => location.isCurrent) || locations[0];
+        const companionLocation = locations.find((location) => !location.isCurrent) || locations[1];
+        const directionsService = new maps.DirectionsService();
+        if (!directionsRendererRef.current) {
+          directionsRendererRef.current = new maps.DirectionsRenderer({
+            map: mapRef.current,
+            suppressMarkers: true,
+            polylineOptions: { strokeColor: '#ff6b4a', strokeOpacity: 0.9, strokeWeight: 5 },
+          });
+        }
+        directionsService.route({
+          origin: { lat: Number(currentLocation.latitude), lng: Number(currentLocation.longitude) },
+          destination: { lat: Number(companionLocation.latitude), lng: Number(companionLocation.longitude) },
+          travelMode: maps.TravelMode.WALKING,
+        }, (result, status) => {
+          if (!active) return;
+          if (status === 'OK' && result?.routes?.[0]?.legs?.[0]) {
+            directionsRendererRef.current.setDirections(result);
+            const leg = result.routes[0].legs[0];
+            setRouteInfo({ distance: leg.distance?.text || '', duration: leg.duration?.text || '' });
+          } else {
+            setRouteInfo(null);
+            setMapError('Google Maps loaded, but walking directions are unavailable for these locations.');
+          }
+        });
+      } else {
+        directionsRendererRef.current?.setDirections({ routes: [] });
+        setRouteInfo(null);
+      }
       setMapError('');
     }).catch((error) => {
       if (active) setMapError(error.message || 'Unable to load Google Maps.');
@@ -95,6 +128,7 @@ export default function LiveLocationMap({ locations, onClose, onRefresh }) {
         <button onClick={onClose} className="text-sm font-semibold text-ink-500">Close map</button>
       </div>
       {mapError ? <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-700">{mapError}</p> : <div ref={mapElement} className="relative mt-3 h-80 overflow-hidden rounded-xl bg-sky-100" />}
+      {routeInfo && <p className="mt-3 rounded-xl bg-coral-50 px-3 py-2 text-sm font-semibold text-coral-700">Route to companion: {routeInfo.distance} · about {routeInfo.duration} walking</p>}
       <div className="mt-3 flex flex-wrap gap-3 text-xs text-ink-600">
         {locations.map((location) => <span key={String(location.userId)}>{location.isCurrent ? 'Your location' : 'Companion location'} · {location.isStale ? 'Stale · ' : ''}{new Date(location.updatedAt).toLocaleTimeString()}</span>)}
       </div>

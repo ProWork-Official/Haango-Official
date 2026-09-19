@@ -3,6 +3,9 @@ import MyContextProvider from './ContextAPI.jsx'
 import { BrowserRouter } from 'react-router-dom'
 import './main.css'
 import App from './App.jsx'
+import { installGlobalButtonLoading } from './lib/buttonLoading';
+
+installGlobalButtonLoading();
 
 createRoot(document.getElementById('root')).render(
    <BrowserRouter>
