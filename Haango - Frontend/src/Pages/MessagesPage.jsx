@@ -69,28 +69,42 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
   }, [active?.bookingId]);
 
   useEffect(() => {
-    if (!active?.bookingId || !window.EventSource || callSession) return undefined;
+    if (!active?.bookingId || !window.EventSource) return undefined;
     const token = localStorage.getItem('haango_access_token');
     const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5005/api';
     const stream = new EventSource(`${apiBase}/bookings/${active.bookingId}/call-signals/stream?access_token=${encodeURIComponent(token || '')}`);
     stream.onmessage = (event) => {
       try {
         const signal = JSON.parse(event.data);
+        if (!signal || !signal.callId) return;
+
         if (signal.type === 'REQUEST') {
           setIncomingCall({ callId: signal.callId, mode: signal.mode, bookingId: active.bookingId });
         }
-        if (signal.type === 'ACCEPT' && callSession?.callId === signal.callId) {
-          setCallSession((current) => (current ? { ...current, accepted: true } : current));
+
+        if (signal.type === 'ACCEPT') {
+          if (callSession?.callId === signal.callId) {
+            setCallSession((current) => (current ? { ...current, accepted: true } : current));
+          }
+          if (incomingCall?.callId === signal.callId) {
+            setIncomingCall(null);
+          }
         }
-        if ((signal.type === 'REJECT' || signal.type === 'END') && callSession?.callId === signal.callId) {
-          setCallSession(null);
+
+        if (signal.type === 'REJECT' || signal.type === 'END') {
+          if (callSession?.callId === signal.callId) {
+            setCallSession(null);
+          }
+          if (incomingCall?.callId === signal.callId) {
+            setIncomingCall(null);
+          }
         }
       } catch (_) {
         // Ignore SSE comments and keep-alive frames.
       }
     };
     return () => stream.close();
-  }, [active?.bookingId, callSession]);
+  }, [active?.bookingId, callSession?.callId, incomingCall?.callId]);
 
   useEffect(() => {
     if (!incomingCall) return undefined;
@@ -259,7 +273,16 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
         body: JSON.stringify({ message: accepted ? `Accepted ${incomingCall.mode === 'VIDEO' ? 'video' : 'voice'} call` : `Rejected ${incomingCall.mode === 'VIDEO' ? 'video' : 'voice'} call` }),
       });
       setMessages((current) => [...current, callMessage]);
-      if (accepted) setCallSession({ callId: incomingCall.callId, mode: incomingCall.mode, role: 'CALLEE' });
+      if (accepted) {
+        setCallSession({
+          callId: incomingCall.callId,
+          mode: incomingCall.mode,
+          role: 'CALLEE',
+          accepted: true,
+          expiresAt: null,
+          stopRingback: null,
+        });
+      }
     } catch (callError) {
       setError(callError.message || 'Unable to respond to the call.');
     } finally {
