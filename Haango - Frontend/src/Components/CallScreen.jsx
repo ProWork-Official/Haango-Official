@@ -14,6 +14,7 @@ export default function CallScreen({ bookingId, personName, callId, mode, role, 
   const startedMedia = useRef(false);
   const ringbackStopRef = useRef(() => {});
   const unansweredTimeoutRef = useRef(null);
+  const connectedRef = useRef(false);
   const [connected, setConnected] = useState(false);
   const [accepted, setAccepted] = useState(acceptedProp);
   const [muted, setMuted] = useState(false);
@@ -41,9 +42,11 @@ export default function CallScreen({ bookingId, personName, callId, mode, role, 
       element.muted = false;
       element.volume = 1;
       element.play().catch(() => setError('Click the speaker button once to enable call audio.'));
+      markConnected();
     };
     peer.onconnectionstatechange = () => {
-      setConnected(['connected', 'completed'].includes(peer.connectionState));
+      const isStable = ['connected', 'completed'].includes(peer.connectionState);
+      if (isStable) markConnected();
       if (peer.connectionState === 'failed') setError('Call connection failed. Check the network and try again.');
     };
     peerRef.current = peer;
@@ -68,6 +71,13 @@ export default function CallScreen({ bookingId, personName, callId, mode, role, 
   const flushCandidates = async () => {
     const peer = peerRef.current;
     while (peer && candidateQueue.current.length) await peer.addIceCandidate(candidateQueue.current.shift());
+  };
+
+  const markConnected = () => {
+    if (connectedRef.current) return;
+    connectedRef.current = true;
+    setConnected(true);
+    ringbackStopRef.current();
   };
 
   useEffect(() => {
@@ -103,6 +113,11 @@ export default function CallScreen({ bookingId, personName, callId, mode, role, 
               ringbackStopRef.current();
               await startMedia(true);
             }
+            if (signal.type === 'ACCEPT' && role === 'CALLEE') {
+              setAccepted(true);
+              if (unansweredTimeoutRef.current) window.clearTimeout(unansweredTimeoutRef.current);
+              ringbackStopRef.current();
+            }
             if (signal.type === 'REJECT' || signal.type === 'END') {
               ringbackStopRef.current();
               setError(signal.type === 'REJECT' ? 'Call rejected.' : 'Call ended.');
@@ -116,10 +131,12 @@ export default function CallScreen({ bookingId, personName, callId, mode, role, 
               const answer = await peer.createAnswer();
               await peer.setLocalDescription(answer);
               await sendSignal('ANSWER', answer);
+              if (peer.connectionState === 'connected') markConnected();
             }
             if (signal.type === 'ANSWER') {
               await peerRef.current?.setRemoteDescription(signal.payload);
               await flushCandidates();
+              if (peerRef.current?.connectionState === 'connected') markConnected();
             }
             if (signal.type === 'ICE') {
               if (peerRef.current?.remoteDescription) await peerRef.current.addIceCandidate(signal.payload);
