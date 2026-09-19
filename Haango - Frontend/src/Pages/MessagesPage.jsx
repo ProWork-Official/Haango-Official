@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, BadgeCheck, Calendar, Flag, MoreVertical, Phone, Send, Shield, X } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, Calendar, Flag, MoreVertical, Phone, Video, Send, Shield, X } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import HaangoDialog from '../Components/HaangoDialog';
@@ -53,6 +53,10 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
   const [showSafety, setShowSafety] = useState(false);
   const [dialog, setDialog] = useState(null);
   const [callOpen, setCallOpen] = useState(false);
+  const [callType, setCallType] = useState(null);
+  const [incomingCall, setIncomingCall] = useState(null);
+  const [acceptedIncoming, setAcceptedIncoming] = useState(false);
+  const callSignalSequence = useRef(0);
   const messagesEndRef = useRef(null);
   const active = conversations.find((conversation) => conversation.id === activeId);
 
@@ -160,19 +164,55 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
     });
   };
 
-  const openCall = async () => {
+  const openCall = async (type) => {
     if (!active) return;
     try {
       setError('');
       const callMessage = await apiRequest(`/messages/${active.bookingId}`, {
         method: 'POST',
-        body: JSON.stringify({ message: 'Started an internet call' }),
+        body: JSON.stringify({ message: type === 'VIDEO' ? 'Started a video call' : 'Started an internet call' }),
       });
       setMessages((current) => [...current, callMessage]);
+      setCallType(type);
       setCallOpen(true);
     } catch (callError) {
       setError(callError.message || 'Unable to start the call.');
     }
+  };
+
+  useEffect(() => {
+    if (!active || callOpen) return undefined;
+    let mounted = true;
+    const pollIncomingCall = async () => {
+      try {
+        const signals = await apiRequest(`/bookings/${active.bookingId}/call-signal?after=${callSignalSequence.current}`);
+        for (const signal of signals) {
+          callSignalSequence.current = Math.max(callSignalSequence.current, signal.sequence);
+          if (mounted && signal.type === 'CALL_REQUEST') setIncomingCall({ ...signal.payload, bookingId: active.bookingId });
+          if (mounted && ['CALL_REJECT', 'CALL_END'].includes(signal.type)) setIncomingCall(null);
+        }
+      } catch (_) { /* Retry on the next poll. */ }
+    };
+    pollIncomingCall();
+    const interval = window.setInterval(pollIncomingCall, 800);
+    return () => { mounted = false; window.clearInterval(interval); };
+  }, [active?.bookingId, callOpen]);
+
+  const respondToIncomingCall = (accepted) => {
+    if (!incomingCall) return;
+    setCallType(accepted ? incomingCall.callType : null);
+    setAcceptedIncoming(accepted);
+    setCallOpen(accepted);
+    if (!accepted) {
+      apiRequest(`/bookings/${incomingCall.bookingId}/call-signal/join`, { method: 'POST' })
+        .then(() => apiRequest(`/bookings/${incomingCall.bookingId}/call-signal`, {
+          method: 'POST',
+          body: JSON.stringify({ type: 'CALL_REJECT', payload: { callId: incomingCall.callId } }),
+        }))
+        .then(() => apiRequest(`/bookings/${incomingCall.bookingId}/call-signal`, { method: 'DELETE' }))
+        .catch(() => {});
+    }
+    setIncomingCall(null);
   };
 
   if (loading) return <div className="pt-24 text-center text-ink-500">Loading messages...</div>;
@@ -186,7 +226,8 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
           <div className="shrink-0">{renderUserAvatar(active.otherUser, 'h-10 w-10')}</div>
           <div className="min-w-0 flex-1"><div className="flex items-center gap-1.5"><p className="truncate font-display font-semibold text-ink-900">{active.otherUser.name}</p><BadgeCheck size={14} className="text-teal-500" /></div><p className="text-xs text-ink-400">Paid booking conversation</p></div>
           <div className="ml-auto flex items-center gap-2">
-            <button onClick={openCall} title="Start call" aria-label="Start call" className="rounded-xl bg-transparent p-2 text-black transition hover:bg-ink-100"><Phone size={19} /></button>
+            <button onClick={() => openCall('AUDIO')} title="Voice call" aria-label="Voice call" className="rounded-xl bg-transparent p-2 text-black transition hover:bg-ink-100"><Phone size={19} /></button>
+            <button onClick={() => openCall('VIDEO')} title="Video call" aria-label="Video call" className="rounded-xl bg-transparent p-2 text-black transition hover:bg-ink-100"><Video size={19} /></button>
             <button onClick={() => setShowSafety(true)} className="p-2 text-ink-500 hover:bg-ink-100"><MoreVertical size={18} /></button>
           </div>
         </div>
@@ -200,7 +241,8 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
         {showSafety && <div className="fixed inset-0 z-50" onClick={() => setShowSafety(false)}><div className="absolute inset-0 bg-ink-900/40" /><div className="absolute bottom-0 left-0 right-0 rounded-t-4xl bg-white p-5" onClick={(event) => event.stopPropagation()}><div className="mb-4 flex items-center justify-between"><h3 className="font-display text-lg font-bold">Safety</h3><button onClick={() => setShowSafety(false)}><X size={20} /></button></div><button onClick={reportUser} className="flex w-full items-center gap-3 rounded-2xl p-4 text-left hover:bg-error-50"><Flag size={20} className="text-error-500" /><span>Report {active.otherUser.name}</span></button><button onClick={blockUser} className="mt-2 flex w-full items-center gap-3 rounded-2xl p-4 text-left hover:bg-ink-50"><Shield size={20} className="text-ink-500" /><span>Block {active.otherUser.name}</span></button></div></div>}
       </div>
       <HaangoDialog open={Boolean(dialog)} {...dialog} onCancel={() => setDialog(null)} />
-      {callOpen && <CallScreen bookingId={active.bookingId} personName={active.otherUser.name} onClose={() => setCallOpen(false)} />}
+      {incomingCall && <div className="fixed inset-0 z-70 flex items-center justify-center bg-ink-900/50 px-4"><div className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-lift"><p className="text-xs font-semibold uppercase tracking-wider text-coral-500">Incoming {incomingCall.callType === 'VIDEO' ? 'video' : 'voice'} call</p><h2 className="mt-2 font-display text-xl font-bold text-ink-900">{active.otherUser.name} is calling</h2><div className="mt-5 flex gap-3"><button onClick={() => respondToIncomingCall(false)} className="flex-1 rounded-xl bg-error-500 px-4 py-3 text-sm font-semibold text-white">Reject</button><button onClick={() => respondToIncomingCall(true)} className="flex-1 rounded-xl bg-success-500 px-4 py-3 text-sm font-semibold text-white">Accept</button></div></div></div>}
+      {callOpen && <CallScreen bookingId={active.bookingId} personName={active.otherUser.name} callType={callType} incoming={acceptedIncoming} onClose={() => { setCallOpen(false); setCallType(null); setAcceptedIncoming(false); }} />}
       </>
     );
   }
