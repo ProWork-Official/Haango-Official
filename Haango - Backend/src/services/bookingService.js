@@ -18,6 +18,7 @@ import { findAvailableCoupon } from './couponService.js';
 const LOCATION_RETENTION_MS = 24 * 60 * 60 * 1000;
 const LOCATION_STALE_MS = 2 * 60 * 1000;
 const INDIA_OFFSET_MINUTES = 330;
+const callSessions = new Map();
 
 function getIndiaCalendarDate(value) {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -344,6 +345,59 @@ export async function getCallRoom(bookingId, userId) {
   if (!isCallUnlocked(booking)) throw forbidden('Internet call unlocks within two hours of the meeting');
   if (!booking.meeting.callRoomId) { booking.meeting.callRoomId = crypto.randomBytes(24).toString('hex'); await booking.save(); }
   return { roomId: booking.meeting.callRoomId, roomUrl: `${env.callProviderUrl}/${booking.meeting.callRoomId}` };
+}
+
+async function getCallBooking(bookingId, userId) {
+  const booking = await Booking.findById(bookingId).select('customerId buddyId paymentStatus bookingStatus');
+  if (!booking) throw notFound('Booking not found');
+  assertParticipant(booking, userId);
+  if (booking.paymentStatus !== 'PAID' || ['COMPLETED', 'CANCELLED', 'REJECTED'].includes(booking.bookingStatus)) {
+    throw forbidden('Calling is unavailable for this booking');
+  }
+  if (!isCallUnlocked(booking)) throw forbidden('Calls unlock within two hours of the meeting');
+  return booking;
+}
+
+export async function joinCall(bookingId, userId) {
+  await getCallBooking(bookingId, userId);
+  const key = String(bookingId);
+  let session = callSessions.get(key);
+  if (!session) {
+    session = { participants: new Set(), messages: [], sequence: 0, lastActivity: Date.now() };
+    callSessions.set(key, session);
+  }
+  const userKey = String(userId);
+  const initiator = session.participants.size === 0;
+  session.participants.add(userKey);
+  session.lastActivity = Date.now();
+  return { initiator, participantCount: session.participants.size };
+}
+
+export async function sendCallSignal(bookingId, userId, type, payload) {
+  await getCallBooking(bookingId, userId);
+  const session = callSessions.get(String(bookingId));
+  if (!session || !session.participants.has(String(userId))) throw forbidden('Join the call before sending a signal');
+  session.messages.push({ sequence: ++session.sequence, senderId: String(userId), type, payload });
+  session.lastActivity = Date.now();
+  return { sent: true, sequence: session.sequence };
+}
+
+export async function pollCallSignals(bookingId, userId, after = 0) {
+  await getCallBooking(bookingId, userId);
+  const session = callSessions.get(String(bookingId));
+  if (!session || !session.participants.has(String(userId))) throw forbidden('Join the call before polling signals');
+  session.lastActivity = Date.now();
+  return session.messages.filter((message) => message.senderId !== String(userId) && message.sequence > Number(after || 0));
+}
+
+export async function leaveCall(bookingId, userId) {
+  const session = callSessions.get(String(bookingId));
+  if (session) {
+    session.participants.delete(String(userId));
+    session.messages.push({ sequence: ++session.sequence, senderId: String(userId), type: 'HANGUP', payload: {} });
+    if (!session.participants.size) callSessions.delete(String(bookingId));
+  }
+  return { left: true };
 }
 
 export async function updateParticipantLocation(bookingId, userId, location, request) {

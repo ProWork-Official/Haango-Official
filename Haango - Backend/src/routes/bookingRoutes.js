@@ -24,6 +24,10 @@ router.post('/:id/cancellation-request', requireAuth, requireBookingUser, bookin
 router.post('/:id/meeting/otp', requireAuth, requireBookingUser, bookingController.issueMeetingOtp);
 router.post('/:id/meeting/verify', requireAuth, requireBookingUser, bookingController.verifyMeetingOtp);
 router.get('/:id/call-room', requireAuth, requireBookingUser, bookingController.getCallRoom);
+router.post('/:id/call-signal/join', requireAuth, requireBookingUser, bookingController.joinCall);
+router.post('/:id/call-signal', requireAuth, requireBookingUser, bookingController.sendCallSignal);
+router.get('/:id/call-signal', requireAuth, requireBookingUser, bookingController.pollCallSignals);
+router.delete('/:id/call-signal', requireAuth, requireBookingUser, bookingController.leaveCall);
 router.get('/:id/locations', locationLimiter, requireAuth, requireBookingUser, bookingController.getLocations);
 router.post('/:id/location', locationLimiter, requireAuth, requireBookingUser, bookingController.updateLocation);
 router.delete('/:id/location', locationLimiter, requireAuth, requireBookingUser, bookingController.stopLocation);

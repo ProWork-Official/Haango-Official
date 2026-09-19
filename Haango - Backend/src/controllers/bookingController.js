@@ -105,6 +105,18 @@ export async function requestCancellation(req, res, next) {
 export async function getCallRoom(req, res, next) {
     try { res.json(success(await bookingService.getCallRoom(req.params.id, req.user._id))); } catch (err) { next(err); }
 }
+export async function joinCall(req, res, next) {
+  try { res.json(success(await bookingService.joinCall(req.params.id, req.user._id))); } catch (err) { next(err); }
+}
+export async function sendCallSignal(req, res, next) {
+  try { res.json(success(await bookingService.sendCallSignal(req.params.id, req.user._id, req.body.type, req.body.payload || {}))); } catch (err) { next(err); }
+}
+export async function pollCallSignals(req, res, next) {
+  try { res.json(success(await bookingService.pollCallSignals(req.params.id, req.user._id, req.query.after))); } catch (err) { next(err); }
+}
+export async function leaveCall(req, res, next) {
+  try { res.json(success(await bookingService.leaveCall(req.params.id, req.user._id))); } catch (err) { next(err); }
+}
 export async function updateLocation(req, res, next) {
   try { res.json(success(await bookingService.updateParticipantLocation(req.params.id, req.user._id, req.body || {}, req))); } catch (err) { next(err); }
 }
