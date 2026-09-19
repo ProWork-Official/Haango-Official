@@ -17,6 +17,15 @@ import { findAvailableCoupon } from './couponService.js';
 
 const LOCATION_RETENTION_MS = 24 * 60 * 60 * 1000;
 const LOCATION_STALE_MS = 2 * 60 * 1000;
+const INDIA_OFFSET_MINUTES = 330;
+
+function getIndiaCalendarDate(value) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date(value));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return new Date(Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day)));
+}
 
 function parseBookingDate(value) {
   const dateValue = String(value || '');
@@ -60,7 +69,12 @@ function getBookingStart(date, startTime) {
 
   const bookingStart = new Date(date);
   bookingStart.setUTCHours(parsedTime.hours, parsedTime.minutes, 0, 0);
+  bookingStart.setTime(bookingStart.getTime() - INDIA_OFFSET_MINUTES * 60 * 1000);
   return bookingStart;
+}
+
+function getMeetingEnd(booking) {
+  return meetingStart(booking).getTime() + Number(booking.duration || 0) * 60 * 60 * 1000;
 }
 
 async function logLocationAccess(bookingId, userId, action, request = {}) {
@@ -212,14 +226,22 @@ export async function cancelBooking(bookingId, userId, userRole) {
 
 function meetingStart(booking) {
   const parsedTime = parseStartTime(booking.startTime) || { hours: 0, minutes: 0 };
-  const date = new Date(booking.date);
+  const date = getIndiaCalendarDate(booking.date);
   date.setUTCHours(parsedTime.hours, parsedTime.minutes, 0, 0);
+  date.setTime(date.getTime() - INDIA_OFFSET_MINUTES * 60 * 1000);
   return date;
 }
 export function isCallUnlocked(booking) {
   if (booking.bookingStatus === 'ONGOING') return true;
   const start = meetingStart(booking);
   return Date.now() >= start.getTime() - 2 * 60 * 60 * 1000;
+}
+function isLocationUnlocked(booking) {
+  if (['COMPLETED', 'CANCELLED', 'REJECTED'].includes(booking.bookingStatus)) return false;
+  if (booking.bookingStatus === 'ONGOING') return true;
+  const now = Date.now();
+  const start = meetingStart(booking).getTime();
+  return now >= start - 2 * 60 * 60 * 1000 && now < getMeetingEnd(booking);
 }
 function isMeetingStartUnlocked(booking) {
   const start = meetingStart(booking);
@@ -287,8 +309,8 @@ export async function requestCancellation(bookingId, userId, reason, details) {
   const booking = await Booking.findById(bookingId);
   if (!booking) throw notFound('Booking not found');
   assertParticipant(booking, userId);
-  if (['COMPLETED', 'CANCELLED', 'REJECTED'].includes(booking.bookingStatus)) throw badRequest('Booking cannot be cancelled', 'INVALID_STATUS');
-  if (!isCallUnlocked(booking)) throw badRequest('Use direct cancellation before the call unlocks', 'CANCELLATION_NOT_LOCKED');
+  if (['COMPLETED', 'CANCELLED', 'REJECTED', 'ONGOING'].includes(booking.bookingStatus) || Date.now() >= meetingStart(booking).getTime()) throw badRequest('Booking cannot be cancelled after the meeting starts', 'INVALID_STATUS');
+  if (!isCallUnlocked(booking)) throw badRequest('Cancellation requests open two hours before the meeting', 'CANCELLATION_NOT_LOCKED');
   if (reason === 'OTHER' && !String(details || '').trim()) throw badRequest('Please explain the other reason', 'DETAILS_REQUIRED');
   return CancellationRequest.create({ bookingId, requesterId: userId, reason, details });
 }
@@ -331,7 +353,7 @@ export async function updateParticipantLocation(bookingId, userId, location, req
   if (booking.paymentStatus !== 'PAID' || ['COMPLETED', 'CANCELLED', 'REJECTED'].includes(booking.bookingStatus)) {
     throw forbidden('Location sharing is unavailable for this booking');
   }
-  if (!isCallUnlocked(booking)) throw forbidden('Location sharing unlocks within two hours of the meeting');
+  if (!isLocationUnlocked(booking)) throw forbidden('Location sharing is locked outside the meeting window');
   const latitude = Number(location.latitude);
   const longitude = Number(location.longitude);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
@@ -355,13 +377,13 @@ export async function updateParticipantLocation(bookingId, userId, location, req
 }
 
 export async function getParticipantLocations(bookingId, userId, request) {
-  const booking = await Booking.findById(bookingId).select('customerId buddyId paymentStatus bookingStatus meeting.locations date startTime');
+  const booking = await Booking.findById(bookingId).select('customerId buddyId paymentStatus bookingStatus meeting.locations date startTime duration');
   if (!booking) throw notFound('Booking not found');
   assertParticipant(booking, userId);
   if (booking.paymentStatus !== 'PAID' || ['COMPLETED', 'CANCELLED', 'REJECTED'].includes(booking.bookingStatus)) {
     throw forbidden('Location sharing is unavailable for this booking');
   }
-  if (!isCallUnlocked(booking)) throw forbidden('Location sharing unlocks within two hours of the meeting');
+  if (!isLocationUnlocked(booking)) throw forbidden('Location sharing is locked outside the meeting window');
   purgeExpiredLocations(booking);
   await booking.save();
   await logLocationAccess(bookingId, userId, 'VIEW', request);

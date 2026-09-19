@@ -9,6 +9,8 @@ import { rewardReferrerForFirstBooking } from './referralService.js';
 import User from '../models/User.js';
 import { redeemCoupon } from './couponService.js';
 
+const INDIA_OFFSET_MINUTES = 330;
+
 export function isRazorpayConfigured() {
   return !!(env.razorpayKeyId && env.razorpayKeySecret);
 }
@@ -82,6 +84,7 @@ export async function createExtensionOrder(booking, hours) {
   const { hours: startHours, minutes: startMinutes } = parseStartTime(booking.startTime);
     const scheduledEnd = new Date(booking.date);
   scheduledEnd.setUTCHours(startHours, startMinutes, 0, 0);
+    scheduledEnd.setTime(scheduledEnd.getTime() - INDIA_OFFSET_MINUTES * 60 * 1000);
     scheduledEnd.setTime(scheduledEnd.getTime() + booking.duration * 60 * 60 * 1000);
     if (Date.now() < scheduledEnd.getTime()) throw badRequest('Extension is available after the original meeting end', 'EXTENSION_TOO_EARLY');
     const amount = Math.round(booking.buddyRate * hours * (1 + env.platformFeePercentage / 100));
