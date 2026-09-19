@@ -3,7 +3,7 @@ import { Camera, CameraOff, Mic, MicOff, PhoneOff, Volume2, VolumeX } from 'luci
 import { apiRequest } from '../lib/api';
 import { startCallTone } from '../lib/callTone';
 
-export default function CallScreen({ bookingId, personName, callId, mode, role, ringbackStop, onClose }) {
+export default function CallScreen({ bookingId, personName, callId, mode, role, accepted: acceptedProp = false, expiresAt, ringbackStop, onClose }) {
   const localVideo = useRef(null);
   const remoteVideo = useRef(null);
   const remoteAudio = useRef(null);
@@ -13,7 +13,9 @@ export default function CallScreen({ bookingId, personName, callId, mode, role, 
   const candidateQueue = useRef([]);
   const startedMedia = useRef(false);
   const ringbackStopRef = useRef(() => {});
+  const unansweredTimeoutRef = useRef(null);
   const [connected, setConnected] = useState(false);
+  const [accepted, setAccepted] = useState(acceptedProp);
   const [muted, setMuted] = useState(false);
   const [cameraOn, setCameraOn] = useState(mode === 'VIDEO');
   const [speakerOn, setSpeakerOn] = useState(true);
@@ -70,6 +72,14 @@ export default function CallScreen({ bookingId, personName, callId, mode, role, 
 
   useEffect(() => {
     let mounted = true;
+    if (acceptedProp) setAccepted(true);
+    unansweredTimeoutRef.current = role === 'CALLER' && expiresAt
+      ? window.setTimeout(() => {
+        sendSignal('END').catch(() => {});
+        setError('No answer. Call ended.');
+        window.setTimeout(onClose, 700);
+      }, Math.max(0, expiresAt - Date.now()))
+      : null;
     const stopRingback = role === 'CALLER' ? (ringbackStop || startCallTone('ringback')) : () => {};
     ringbackStopRef.current = stopRingback;
     const connect = async () => {
@@ -81,10 +91,12 @@ export default function CallScreen({ bookingId, personName, callId, mode, role, 
         eventSourceRef.current = stream;
         stream.onmessage = async (event) => {
           if (!mounted) return;
-          const signal = JSON.parse(event.data);
-          if (signal.callId !== callId) return;
           try {
+            const signal = JSON.parse(event.data);
+            if (signal.callId !== callId) return;
             if (signal.type === 'ACCEPT' && role === 'CALLER') {
+              setAccepted(true);
+              if (unansweredTimeoutRef.current) window.clearTimeout(unansweredTimeoutRef.current);
               ringbackStopRef.current();
               await startMedia(true);
             }
@@ -109,8 +121,8 @@ export default function CallScreen({ bookingId, personName, callId, mode, role, 
               if (peerRef.current?.remoteDescription) await peerRef.current.addIceCandidate(signal.payload);
               else candidateQueue.current.push(signal.payload);
             }
-          } catch (signalError) {
-            if (mounted) setError(signalError.message || 'Unable to connect the call.');
+          } catch (_) {
+            // Ignore keep-alive and non-signal event data.
           }
         };
         stream.onerror = () => { if (mounted) setError('Call signaling connection lost.'); };
@@ -121,13 +133,14 @@ export default function CallScreen({ bookingId, personName, callId, mode, role, 
     connect();
     return () => {
       mounted = false;
+      if (unansweredTimeoutRef.current) window.clearTimeout(unansweredTimeoutRef.current);
       stopRingback();
       eventSourceRef.current?.close();
       mediaRef.current?.getTracks().forEach((track) => track.stop());
       peerRef.current?.close();
       sendSignal('END').catch(() => {});
     };
-  }, [bookingId, callId, mode, role]);
+  }, [bookingId, callId, mode, role, expiresAt, acceptedProp]);
 
   const endCall = async () => {
     await sendSignal('END').catch(() => {});
@@ -157,7 +170,7 @@ export default function CallScreen({ bookingId, personName, callId, mode, role, 
 
   return (
     <div className="fixed inset-0 z-100 flex flex-col bg-[#101114] text-white">
-      <div className="flex items-center justify-between px-5 py-4"><div><p className="text-xs uppercase tracking-[0.2em] text-white/50">Haango {mode === 'VIDEO' ? 'video' : 'voice'} call</p><h2 className="mt-1 text-lg font-bold">{personName}</h2></div><span className="text-xs text-white/60">{connected ? 'Connected' : role === 'CALLER' ? 'Calling...' : 'Connecting...'}</span></div>
+      <div className="flex items-center justify-between px-5 py-4"><div><p className="text-xs uppercase tracking-[0.2em] text-white/50">Haango {mode === 'VIDEO' ? 'video' : 'voice'} call</p><h2 className="mt-1 text-lg font-bold">{personName}</h2></div><span className="text-xs text-white/60">{connected ? 'Connected' : accepted ? 'Accepted, connecting...' : role === 'CALLER' ? 'Calling...' : 'Connecting...'}</span></div>
       <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-[#191b20] p-4" onClick={() => { const element = remoteAudio.current || remoteVideo.current; element?.play().catch(() => {}); }}>
         {mode === 'VIDEO' ? <><video ref={remoteVideo} autoPlay playsInline className="h-full max-h-[72vh] w-full rounded-3xl object-cover" /><video ref={localVideo} autoPlay muted playsInline className="absolute bottom-6 right-6 h-32 w-24 rounded-2xl border border-white/20 bg-black object-cover shadow-2xl" /></> : <><audio ref={remoteAudio} autoPlay /><div className="text-center"><div className="mx-auto flex h-28 w-28 items-center justify-center rounded-full bg-white/10 text-4xl font-bold">{personName?.[0]?.toUpperCase() || '?'}</div><p className="mt-4 text-lg font-semibold">Voice call</p></div></>}
         {error && <p className="absolute left-5 right-5 top-5 rounded-xl bg-red-500/90 p-3 text-sm">{error}</p>}

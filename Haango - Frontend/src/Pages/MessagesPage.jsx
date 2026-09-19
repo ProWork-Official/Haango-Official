@@ -74,9 +74,19 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
     const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5005/api';
     const stream = new EventSource(`${apiBase}/bookings/${active.bookingId}/call-signals/stream?access_token=${encodeURIComponent(token || '')}`);
     stream.onmessage = (event) => {
-      const signal = JSON.parse(event.data);
-      if (signal.type === 'REQUEST') {
-        setIncomingCall({ callId: signal.callId, mode: signal.mode, bookingId: active.bookingId });
+      try {
+        const signal = JSON.parse(event.data);
+        if (signal.type === 'REQUEST') {
+          setIncomingCall({ callId: signal.callId, mode: signal.mode, bookingId: active.bookingId });
+        }
+        if (signal.type === 'ACCEPT' && callSession?.callId === signal.callId) {
+          setCallSession((current) => (current ? { ...current, accepted: true } : current));
+        }
+        if ((signal.type === 'REJECT' || signal.type === 'END') && callSession?.callId === signal.callId) {
+          setCallSession(null);
+        }
+      } catch (_) {
+        // Ignore SSE comments and keep-alive frames.
       }
     };
     return () => stream.close();
@@ -87,6 +97,33 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
     const stopTone = startCallTone('incoming');
     return stopTone;
   }, [incomingCall]);
+
+  useEffect(() => {
+    if (!incomingCall) return undefined;
+    const timeout = window.setTimeout(() => {
+      respondToCall(false);
+    }, 30000);
+    return () => window.clearTimeout(timeout);
+  }, [incomingCall]);
+
+  useEffect(() => {
+    if (!callSession || callSession.accepted) return undefined;
+    const timer = window.setInterval(async () => {
+      try {
+        const signals = await apiRequest(`/bookings/${active.bookingId}/call-signals?after=0`);
+        const newest = signals.find((signal) => signal.callId === callSession.callId && ['ACCEPT', 'REJECT', 'END'].includes(signal.type));
+        if (newest?.type === 'ACCEPT') {
+          setCallSession((current) => (current ? { ...current, accepted: true } : current));
+        }
+        if (newest && ['REJECT', 'END'].includes(newest.type)) {
+          setCallSession(null);
+        }
+      } catch (_) {
+        // If the stream is still alive, it will update the state without needing fallback polling.
+      }
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [callSession, active?.bookingId]);
 
   useEffect(() => {
     let mounted = true;
@@ -206,7 +243,7 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
       });
       setMessages((current) => [...current, callMessage]);
       await apiRequest(`/bookings/${active.bookingId}/call-signal`, { method: 'POST', body: JSON.stringify({ type: 'REQUEST', callId, mode }) });
-      setCallSession({ callId, mode, role: 'CALLER', stopRingback });
+      setCallSession({ callId, mode, role: 'CALLER', accepted: false, stopRingback, expiresAt: Date.now() + 30000 });
     } catch (callError) {
       stopRingback();
       setError(callError.message || 'Unable to start the call.');
@@ -253,7 +290,7 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
       </div>
       <HaangoDialog open={Boolean(dialog)} {...dialog} onCancel={() => setDialog(null)} />
       {incomingCall && <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/60 px-4" role="alertdialog" aria-modal="true"><div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl"><p className="text-xs font-semibold uppercase tracking-wider text-coral-500">Incoming {incomingCall.mode === 'VIDEO' ? 'video' : 'voice'} call</p><h2 className="mt-2 font-display text-xl font-bold text-ink-900">{active.otherUser.name} is calling</h2><p className="mt-2 text-sm text-ink-500">Accept the call to connect.</p><div className="mt-5 flex gap-3"><button onClick={() => respondToCall(false)} className="flex-1 rounded-xl bg-red-500 px-4 py-3 text-sm font-semibold text-white">Reject</button><button onClick={() => respondToCall(true)} className="flex-1 rounded-xl bg-green-500 px-4 py-3 text-sm font-semibold text-white">Accept</button></div></div></div>}
-      {callSession && <CallScreen bookingId={active.bookingId} personName={active.otherUser.name} callId={callSession.callId} mode={callSession.mode} role={callSession.role} ringbackStop={callSession.stopRingback} onClose={() => setCallSession(null)} />}
+      {callSession && <CallScreen bookingId={active.bookingId} personName={active.otherUser.name} callId={callSession.callId} mode={callSession.mode} role={callSession.role} accepted={callSession.accepted} expiresAt={callSession.expiresAt} ringbackStop={callSession.stopRingback} onClose={() => setCallSession(null)} />}
       </>
     );
   }
