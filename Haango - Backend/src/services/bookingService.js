@@ -378,7 +378,7 @@ export async function sendCallSignal(bookingId, userId, type, payload) {
   await getCallBooking(bookingId, userId);
   const session = callSessions.get(String(bookingId));
   if (!session || !session.participants.has(String(userId))) throw forbidden('Join the call before sending a signal');
-  session.messages.push({ sequence: ++session.sequence, senderId: String(userId), type, payload });
+  session.messages.push({ sequence: ++session.sequence, senderId: String(userId), type, payload, createdAt: Date.now() });
   session.lastActivity = Date.now();
   const subscribers = callSubscribers.get(String(bookingId)) || new Set();
   subscribers.forEach((subscriber) => {
@@ -390,6 +390,7 @@ export async function sendCallSignal(bookingId, userId, type, payload) {
 export async function subscribeCallSignals(bookingId, userId, response) {
   await getCallBooking(bookingId, userId, false);
   const key = String(bookingId);
+  const session = callSessions.get(key);
   const subscriber = { userId: String(userId), response, send: (message) => response.write(`data: ${JSON.stringify(message)}\n\n`) };
   if (!callSubscribers.has(key)) callSubscribers.set(key, new Set());
   callSubscribers.get(key).add(subscriber);
@@ -401,6 +402,12 @@ export async function subscribeCallSignals(bookingId, userId, response) {
   subscriber.heartbeat = setInterval(() => response.write(': keep-alive\n\n'), 15000);
   response.on('close', () => clearInterval(subscriber.heartbeat));
   response.write(': connected\n\n');
+  const activeRequest = session?.messages.find((message) => (
+    message.type === 'CALL_REQUEST'
+    && message.createdAt
+    && Date.now() - message.createdAt < 60 * 1000
+  ));
+  if (activeRequest && activeRequest.senderId !== String(userId)) subscriber.send(activeRequest);
 }
 
 export async function pollCallSignals(bookingId, userId, after = 0) {
