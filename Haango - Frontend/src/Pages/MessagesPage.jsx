@@ -12,7 +12,7 @@ import {
   stopCallTone,
 } from '../lib/callTone';
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5005';
 
 function formatTime(value) {
   return value ? new Date(value).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
@@ -318,12 +318,19 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
     const socket = io(SOCKET_URL, {
       autoConnect: true,
       transports: ['websocket'],
+      withCredentials: true,
       auth: {
         token: localStorage.getItem('haango_access_token'),
       },
     });
 
     socketRef.current = socket;
+
+    socket.on('connect_error', (error) => {
+      console.error('Socket.IO connection error:', error.message);
+      setError('Unable to connect to the live call server. Please refresh and try again.');
+    });
+
     socket.emit('join-user', String(profile.id));
 
     socket.on('call:invite', (payload) => {
