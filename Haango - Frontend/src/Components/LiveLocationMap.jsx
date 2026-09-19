@@ -36,6 +36,7 @@ export default function LiveLocationMap({ locations, onClose, onRefresh }) {
   const markersRef = useRef([]);
   const directionsRendererRef = useRef(null);
   const [mapError, setMapError] = useState('');
+  const [routeError, setRouteError] = useState('');
   const [routeInfo, setRouteInfo] = useState(null);
 
   useEffect(() => {
@@ -79,6 +80,7 @@ export default function LiveLocationMap({ locations, onClose, onRefresh }) {
       if (locations.length === 1) mapRef.current.setZoom(15);
 
       if (locations.length >= 2) {
+        setRouteError('');
         const currentLocation = locations.find((location) => location.isCurrent) || locations[0];
         const companionLocation = locations.find((location) => !location.isCurrent) || locations[1];
         const directionsService = new maps.DirectionsService();
@@ -101,12 +103,13 @@ export default function LiveLocationMap({ locations, onClose, onRefresh }) {
             setRouteInfo({ distance: leg.distance?.text || '', duration: leg.duration?.text || '' });
           } else {
             setRouteInfo(null);
-            setMapError('Google Maps loaded, but walking directions are unavailable for these locations.');
+            setRouteError('Walking directions are unavailable here, but you can still use the blue and green dots to reach each other.');
           }
         });
       } else {
         directionsRendererRef.current?.setDirections({ routes: [] });
         setRouteInfo(null);
+        setRouteError('');
       }
       setMapError('');
     }).catch((error) => {
@@ -127,7 +130,9 @@ export default function LiveLocationMap({ locations, onClose, onRefresh }) {
         </div>
         <button onClick={onClose} className="text-sm font-semibold text-ink-500">Close map</button>
       </div>
-      {mapError ? <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-700">{mapError}</p> : <div ref={mapElement} className="relative mt-3 h-80 overflow-hidden rounded-xl bg-sky-100" />}
+      <div ref={mapElement} className="relative mt-3 h-80 overflow-hidden rounded-xl bg-sky-100" />
+      {mapError && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-700">{mapError}</p>}
+      {routeError && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-700">{routeError}</p>}
       {routeInfo && <p className="mt-3 rounded-xl bg-coral-50 px-3 py-2 text-sm font-semibold text-coral-700">Route to companion: {routeInfo.distance} · about {routeInfo.duration} walking</p>}
       <div className="mt-3 flex flex-wrap gap-3 text-xs text-ink-600">
         {locations.map((location) => <span key={String(location.userId)}>{location.isCurrent ? 'Your location' : 'Companion location'} · {location.isStale ? 'Stale · ' : ''}{new Date(location.updatedAt).toLocaleTimeString()}</span>)}

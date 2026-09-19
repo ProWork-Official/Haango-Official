@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, BadgeCheck, Calendar, Flag, MoreVertical, Send, Shield, X } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, Calendar, Flag, MoreVertical, Phone, Send, Shield, X } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import HaangoDialog from '../Components/HaangoDialog';
+import CallScreen from '../Components/CallScreen';
 
 function formatTime(value) {
   return value ? new Date(value).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
@@ -51,6 +52,7 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
   const [error, setError] = useState('');
   const [showSafety, setShowSafety] = useState(false);
   const [dialog, setDialog] = useState(null);
+  const [callOpen, setCallOpen] = useState(false);
   const messagesEndRef = useRef(null);
   const active = conversations.find((conversation) => conversation.id === activeId);
 
@@ -77,6 +79,24 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
       .catch((loadError) => { if (mounted) setError(loadError.message || 'Unable to load messages.'); });
     return () => { mounted = false; };
   }, [activeId, profile?.id]);
+
+  useEffect(() => {
+    if (!activeId) return undefined;
+    let activePolling = true;
+    const refreshMessages = async () => {
+      try {
+        const latestMessages = await apiRequest(`/messages/${activeId}`);
+        if (activePolling && Array.isArray(latestMessages)) setMessages(latestMessages);
+      } catch (_) {
+        // The initial conversation remains visible if polling briefly fails.
+      }
+    };
+    const interval = window.setInterval(refreshMessages, 3000);
+    return () => {
+      activePolling = false;
+      window.clearInterval(interval);
+    };
+  }, [activeId]);
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages.length]);
 
@@ -141,10 +161,18 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
   };
 
   const openCall = async () => {
+    if (!active) return;
     try {
-      const room = await apiRequest(`/bookings/${active.bookingId}/call-room`);
-      window.open(room.roomUrl, '_blank', 'noopener,noreferrer');
-    } catch (callError) { setError(callError.message || 'Calls unlock within two hours of the meeting.'); }
+      setError('');
+      const callMessage = await apiRequest(`/messages/${active.bookingId}`, {
+        method: 'POST',
+        body: JSON.stringify({ message: 'Started an internet call' }),
+      });
+      setMessages((current) => [...current, callMessage]);
+      setCallOpen(true);
+    } catch (callError) {
+      setError(callError.message || 'Unable to start the call.');
+    }
   };
 
   if (loading) return <div className="pt-24 text-center text-ink-500">Loading messages...</div>;
@@ -158,7 +186,7 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
           <div className="shrink-0">{renderUserAvatar(active.otherUser, 'h-10 w-10')}</div>
           <div className="min-w-0 flex-1"><div className="flex items-center gap-1.5"><p className="truncate font-display font-semibold text-ink-900">{active.otherUser.name}</p><BadgeCheck size={14} className="text-teal-500" /></div><p className="text-xs text-ink-400">Paid booking conversation</p></div>
           <div className="ml-auto flex items-center gap-2">
-            <button onClick={openCall} className="rounded-xl bg-coral-500 px-3 py-2 text-xs font-semibold text-white">Internet call</button>
+            <button onClick={openCall} title="Start call" aria-label="Start call" className="rounded-xl bg-transparent p-2 text-black transition hover:bg-ink-100"><Phone size={19} /></button>
             <button onClick={() => setShowSafety(true)} className="p-2 text-ink-500 hover:bg-ink-100"><MoreVertical size={18} /></button>
           </div>
         </div>
@@ -172,6 +200,7 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
         {showSafety && <div className="fixed inset-0 z-50" onClick={() => setShowSafety(false)}><div className="absolute inset-0 bg-ink-900/40" /><div className="absolute bottom-0 left-0 right-0 rounded-t-4xl bg-white p-5" onClick={(event) => event.stopPropagation()}><div className="mb-4 flex items-center justify-between"><h3 className="font-display text-lg font-bold">Safety</h3><button onClick={() => setShowSafety(false)}><X size={20} /></button></div><button onClick={reportUser} className="flex w-full items-center gap-3 rounded-2xl p-4 text-left hover:bg-error-50"><Flag size={20} className="text-error-500" /><span>Report {active.otherUser.name}</span></button><button onClick={blockUser} className="mt-2 flex w-full items-center gap-3 rounded-2xl p-4 text-left hover:bg-ink-50"><Shield size={20} className="text-ink-500" /><span>Block {active.otherUser.name}</span></button></div></div>}
       </div>
       <HaangoDialog open={Boolean(dialog)} {...dialog} onCancel={() => setDialog(null)} />
+      {callOpen && <CallScreen bookingId={active.bookingId} personName={active.otherUser.name} onClose={() => setCallOpen(false)} />}
       </>
     );
   }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Calendar, Clock, MapPin, MessageCircle } from 'lucide-react';
+import { ArrowLeft, Calendar, CheckCircle2, ChevronRight, Clock, Lock, MapPin, MessageCircle, ShieldCheck, XCircle } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import { getCurrentLocation } from '../lib/location';
 import LiveLocationMap from '../Components/LiveLocationMap';
@@ -13,6 +13,12 @@ function getIndiaCalendarDate(value) {
   }).formatToParts(new Date(value));
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return new Date(Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day)));
+}
+
+function formatDate(value) {
+  return new Date(value).toLocaleDateString('en-IN', {
+    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+  });
 }
 
 export default function BuddyBookingsPage({ onBack, onMessage }) {
@@ -148,54 +154,60 @@ export default function BuddyBookingsPage({ onBack, onMessage }) {
         <p className="mt-2 text-ink-500">Your complete companion booking schedule.</p>
         {error && <p className="mt-5 rounded-2xl bg-error-50 p-4 text-sm text-error-600">{error}</p>}
         {locationError && <p className="mt-5 rounded-2xl bg-sky-50 p-4 text-sm text-sky-700">{locationError}</p>}
-        {otpForm && (
-          <form onSubmit={submitOtp} className="mt-5 rounded-2xl border border-coral-200 bg-coral-50 p-5">
-            <h2 className="font-display text-lg font-bold text-ink-900">{otpForm.phase === 'START' ? 'Confirm meeting start' : 'Confirm meeting end'}</h2>
-            <p className="mt-1 text-sm text-ink-600">Ask the customer for the six-digit OTP shown on their booking page.</p>
-            <input value={otpCode} onChange={(event) => setOtpCode(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" maxLength={6} autoFocus className="mt-4 w-full rounded-xl border border-ink-200 bg-white px-4 py-3 text-center text-2xl tracking-[0.35em]" placeholder="000000" />
-            <div className="mt-4 flex gap-2">
-              <button type="submit" disabled={updating === `${otpForm.bookingId}:otp`} className="btn-primary text-sm">{updating === `${otpForm.bookingId}:otp` ? 'Verifying...' : 'Verify OTP'}</button>
-              <button type="button" onClick={() => setOtpForm(null)} className="btn-ghost text-sm">Cancel</button>
-            </div>
-          </form>
-        )}
         {loading ? <p className="mt-8 text-ink-500">Loading bookings...</p> : (
           <div className="mt-8 space-y-4">
             {bookings.length ? bookings.map((booking) => (
-              <div key={booking._id} className="card p-5">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div><p className="text-xs font-semibold uppercase tracking-wider text-coral-500">{booking.activityId?.name || booking.activitySlug}</p><h2 className="mt-1 font-display text-lg font-bold text-ink-900">{booking.customerId?.name || 'Customer'}</h2></div>
-                  <span className="rounded-full bg-ink-50 px-3 py-1 text-xs font-semibold text-ink-600">{booking.bookingStatus}</span>
+              <div key={booking._id} className="rounded-[28px] border border-[#e6ddd4] bg-[#f7f5f2] p-3 shadow-[0_4px_18px_rgba(17,24,39,0.04)] sm:p-5">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#5a7a9e]">{booking.activityId?.name || booking.activitySlug || 'HAANGO PLAN'}</p>
+                    <h2 className="mt-1 font-display text-2xl font-black tracking-[-0.04em] text-ink-900">{booking.customerId?.name || 'Customer'}</h2>
+                    <div className="mt-2 flex items-center gap-2 text-sm font-semibold text-[#1d9d68]"><CheckCircle2 size={16} className="fill-[#1d9d68] text-white" /><span>{booking.bookingStatus}</span></div>
+                  </div>
+                  <div className="inline-flex items-center gap-2 self-start rounded-full border border-[#bfe8d6] bg-[#eafaf1] px-3 py-2 text-sm font-semibold text-[#1d9d68]"><CheckCircle2 size={16} className="fill-[#1d9d68] text-white" /><span>{booking.paymentStatus === 'PAID' ? 'Booking Confirmed' : booking.bookingStatus}</span></div>
                 </div>
-                <div className="mt-4 grid gap-3 text-sm text-ink-600 sm:grid-cols-3"><span className="flex items-center gap-2"><Calendar size={16} /> {new Date(booking.date).toLocaleDateString('en-IN')}</span><span className="flex items-center gap-2"><Clock size={16} /> {booking.startTime} · {booking.duration} hrs</span><span className="flex items-center gap-2"><MapPin size={16} /> {booking.meetingLocation}</span></div>
-                {booking.paymentStatus === 'PAID' && !['CANCELLED', 'REJECTED'].includes(booking.bookingStatus) && (
-                  <button onClick={() => onMessage(booking._id)} className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-coral-600">
-                    <MessageCircle size={16} /> Message customer
-                  </button>
-                )}
+
+                <div className="mt-4 grid gap-3 border-t border-[#e9e1d9] pt-4 text-sm text-ink-700 sm:grid-cols-3 sm:items-center">
+                  <div className="flex items-center gap-2"><Calendar size={16} className="text-ink-500" /><span>{formatDate(booking.date)}</span></div>
+                  <div className="flex items-center gap-2"><Clock size={16} className="text-ink-500" /><span>{booking.startTime || 'Scheduled'} · {booking.duration} hrs</span></div>
+                  <div className="flex items-center gap-2"><MapPin size={16} className="text-ink-500" /><span>{booking.meetingLocation}</span></div>
+                </div>
+
+                <div className="mt-4 rounded-2xl border border-[#cfe5f7] bg-[#eaf3fb] px-3 py-3 text-sm text-[#426d9a] sm:px-4">
+                  <div className="flex items-center gap-3"><div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#d9ebfb] text-[#3b6ea8]"><ShieldCheck size={16} /></div><p className="font-medium">Customer contact details stay hidden until the meetup for everyone&apos;s safety.</p><ChevronRight size={16} className="ml-auto" /></div>
+                </div>
+
                 {booking.paymentStatus === 'PAID' && !['COMPLETED', 'CANCELLED', 'REJECTED'].includes(booking.bookingStatus) && (
-                  <div className="mt-4 rounded-2xl border border-ink-100 bg-ink-50 p-4">
-                    <button onClick={() => showLiveMap(booking)} className="btn-ghost text-sm">Show user location</button>
-                    {openLocationMap === booking._id && <LiveLocationMap locations={locations[booking._id]} onClose={() => {
-                      if (locationWatches.current[booking._id]) {
-                        navigator.geolocation.clearWatch(locationWatches.current[booking._id]);
-                        delete locationWatches.current[booking._id];
-                      }
-                      setOpenLocationMap(null);
-                    }} onRefresh={async () => {
-                      const refreshed = await apiRequest(`/bookings/${booking._id}/locations`);
-                      setLocations((current) => ({ ...current, [booking._id]: refreshed }));
-                    }} />}
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                    <div className="flex items-center gap-3 rounded-[20px] border border-[#eadfce] bg-[#f8f2ec] p-4"><div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#f5e2d2] text-[#d9864b]"><MapPin size={20} /></div><div><p className="text-xl font-extrabold text-ink-900">Location sharing</p><p className="text-sm text-ink-600">Available 2h before meeting</p></div></div>
+                    <div className="flex items-center gap-3 rounded-[20px] border border-[#dbe9f7] bg-[#edf6ff] p-4"><div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#dfeeff] text-[#3a6fb5]"><Lock size={20} /></div><div><p className="text-xl font-extrabold text-ink-900">Meeting status</p><p className="text-sm text-ink-600">{booking.bookingStatus === 'ONGOING' ? 'In progress' : booking.bookingStatus === 'CONFIRMED' ? 'Ready to start' : 'Awaiting acceptance'}</p></div></div>
                   </div>
                 )}
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {booking.bookingStatus === 'PENDING' && <>
-                    <button onClick={() => updateBooking(booking._id, 'accept')} disabled={updating} className="btn-primary text-sm">Accept booking</button>
-                    <button onClick={() => updateBooking(booking._id, 'reject')} disabled={updating} className="btn-ghost text-sm">Reject</button>
-                  </>}
-                  {booking.bookingStatus === 'CONFIRMED' && <button onClick={() => updateBooking(booking._id, 'start')} disabled={updating} className="btn-primary text-sm">Enter start OTP</button>}
-                  {booking.bookingStatus === 'ONGOING' && <button onClick={() => updateBooking(booking._id, 'complete')} disabled={updating} className="btn-primary text-sm">Enter end OTP</button>}
+
+                {booking.paymentStatus === 'PAID' && !['COMPLETED', 'CANCELLED', 'REJECTED'].includes(booking.bookingStatus) && (
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                    <button onClick={() => onMessage(booking._id)} className="inline-flex items-center justify-center gap-3 rounded-[18px] border border-[#d6d2cd] bg-white px-4 py-3 text-base font-semibold text-ink-800 transition hover:bg-ink-50"><MessageCircle size={18} /> Message customer</button>
+                    <button onClick={() => showLiveMap(booking)} className="inline-flex items-center justify-center gap-3 rounded-[18px] border border-[#d6d2cd] bg-white px-4 py-3 text-base font-semibold text-ink-800 transition hover:bg-ink-50"><MapPin size={18} /> Show customer location</button>
+                  </div>
+                )}
+
+                {openLocationMap === booking._id && <LiveLocationMap locations={locations[booking._id]} onClose={() => { if (locationWatches.current[booking._id]) { navigator.geolocation.clearWatch(locationWatches.current[booking._id]); delete locationWatches.current[booking._id]; } setOpenLocationMap(null); }} onRefresh={async () => { const refreshed = await apiRequest(`/bookings/${booking._id}/locations`); setLocations((current) => ({ ...current, [booking._id]: refreshed })); }} />}
+
+                <div className="mt-5 flex flex-wrap gap-2">
+                  {booking.bookingStatus === 'PENDING' && <><button onClick={() => updateBooking(booking._id, 'accept')} disabled={Boolean(updating)} className="btn-primary text-sm"><CheckCircle2 size={16} /> Accept booking</button><button onClick={() => updateBooking(booking._id, 'reject')} disabled={Boolean(updating)} className="btn-ghost text-sm"><XCircle size={16} /> Reject</button></>}
+                  {booking.bookingStatus === 'CONFIRMED' && <button onClick={() => updateBooking(booking._id, 'start')} disabled={Boolean(updating)} className="btn-primary text-sm"><Lock size={16} /> Enter start OTP</button>}
+                  {booking.bookingStatus === 'ONGOING' && <button onClick={() => updateBooking(booking._id, 'complete')} disabled={Boolean(updating)} className="btn-primary text-sm"><CheckCircle2 size={16} /> Enter end OTP</button>}
+                  {booking.bookingStatus === 'COMPLETED' && <button disabled className="btn-ghost text-sm"><CheckCircle2 size={16} /> Booking completed</button>}
                 </div>
+
+                {otpForm?.bookingId === booking._id && (
+                  <form onSubmit={submitOtp} className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-coral-200 bg-coral-50 p-3">
+                    <div className="mr-1"><p className="text-xs font-bold text-coral-700">{otpForm.phase === 'START' ? 'Meeting start OTP' : 'Meeting end OTP'}</p><p className="text-[11px] text-ink-600">Enter the customer&apos;s six-digit code.</p></div>
+                    <input value={otpCode} onChange={(event) => setOtpCode(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" maxLength={6} autoFocus className="w-32 rounded-lg border border-ink-200 bg-white px-3 py-2 text-center font-mono text-lg tracking-[0.2em]" placeholder="000000" />
+                    <button type="submit" disabled={updating === `${otpForm.bookingId}:otp`} className="btn-primary text-sm">{updating === `${otpForm.bookingId}:otp` ? 'Verifying...' : 'Verify OTP'}</button>
+                    <button type="button" onClick={() => setOtpForm(null)} className="btn-ghost text-sm">Cancel</button>
+                  </form>
+                )}
               </div>
             )) : <p className="text-sm text-ink-500">No bookings yet.</p>}
           </div>
