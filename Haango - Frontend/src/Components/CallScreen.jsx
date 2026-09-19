@@ -51,18 +51,10 @@ export default function CallScreen({
     <div className="fixed inset-0 z-[60] bg-[#160f1c]/75 backdrop-blur-md">
       <div className="flex min-h-full items-center justify-center p-4">
         <div className="w-full max-w-md overflow-hidden rounded-[32px] border border-white/10 bg-[radial-gradient(circle_at_top,_rgba(255,131,92,0.35),_rgba(37,20,23,0.92)_35%,_rgba(15,10,16,1)_100%)] text-white shadow-[0_30px_80px_rgba(0,0,0,0.45)]">
-          <div className="flex items-center justify-between px-5 pt-5">
+          <div className="flex items-center justify-center px-5 pt-5">
             <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/80">
               {callState === 'connected' ? 'Live call' : 'Haango call'}
             </span>
-            <button
-              type="button"
-              onClick={onEnd}
-              className="rounded-full border border-white/10 bg-white/5 p-2 text-white/80 transition hover:bg-white/10"
-              aria-label="Close call"
-            >
-              <X size={18} />
-            </button>
           </div>
 
           <div className="px-6 pb-6 pt-8 text-center">
@@ -126,28 +118,25 @@ export default function CallScreen({
             {(isIncoming || callState === 'dialing') && (
               <div className="mt-8 grid grid-cols-2 gap-3">
                 {isIncoming && (
-                  <button
-                    type="button"
-                    onClick={onAccept}
-                    className="flex items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,_#2dd4bf,_#0ea5a4)] px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-900/40 transition hover:brightness-110"
-                  >
-                    <Check size={18} />
-                    Accept
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={onAccept}
+                      className="flex items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,_#2dd4bf,_#0ea5a4)] px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-900/40 transition hover:brightness-110"
+                    >
+                      <Check size={18} />
+                      Accept
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onReject}
+                      className="flex items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,_#f97316,_#ef4444)] px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-rose-900/30 transition hover:brightness-110"
+                    >
+                      <PhoneOff size={18} />
+                      Reject
+                    </button>
+                  </>
                 )}
-
-                <button
-                  type="button"
-                  onClick={onReject}
-                  className={`flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold text-white ${
-                    isIncoming
-                      ? 'bg-[linear-gradient(135deg,_#f97316,_#ef4444)] shadow-lg shadow-rose-900/30 hover:brightness-110'
-                      : 'border border-white/10 bg-white/5 hover:bg-white/10'
-                  }`}
-                >
-                  {isIncoming ? <PhoneOff size={18} /> : <X size={18} />}
-                  {isIncoming ? 'Reject' : 'Cancel'}
-                </button>
               </div>
             )}
 

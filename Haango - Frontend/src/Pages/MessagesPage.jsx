@@ -326,12 +326,20 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
 
     socketRef.current = socket;
 
+    socket.on('connect', () => {
+      setError('');
+      socket.emit('join-user', String(profile.id));
+    });
+
     socket.on('connect_error', (error) => {
       console.error('Socket.IO connection error:', error.message);
       setError('Unable to connect to the live call server. Please refresh and try again.');
     });
 
-    socket.emit('join-user', String(profile.id));
+    socket.on('disconnect', () => {
+      if (!callState || callState === 'idle') return;
+      setError('Live call connection dropped. Please re-open the call.');
+    });
 
     socket.on('call:invite', (payload) => {
       if (!payload || String(payload.toUserId) !== String(profile.id)) return;
