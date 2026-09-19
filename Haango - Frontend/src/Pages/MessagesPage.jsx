@@ -75,7 +75,7 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
     const stream = new EventSource(`${apiBase}/bookings/${active.bookingId}/call-signals/stream?access_token=${encodeURIComponent(token || '')}`);
     stream.onmessage = (event) => {
       const signal = JSON.parse(event.data);
-      if (signal.type === 'REQUEST' && signal.senderId !== localStorage.getItem('haango_user_id')) {
+      if (signal.type === 'REQUEST') {
         setIncomingCall({ callId: signal.callId, mode: signal.mode, bookingId: active.bookingId });
       }
     };
@@ -200,6 +200,11 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
     const callId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const stopRingback = startCallTone('ringback');
     try {
+      const callMessage = await apiRequest(`/messages/${active.bookingId}`, {
+        method: 'POST',
+        body: JSON.stringify({ message: mode === 'VIDEO' ? 'Started a video call' : 'Started a voice call' }),
+      });
+      setMessages((current) => [...current, callMessage]);
       await apiRequest(`/bookings/${active.bookingId}/call-signal`, { method: 'POST', body: JSON.stringify({ type: 'REQUEST', callId, mode }) });
       setCallSession({ callId, mode, role: 'CALLER', stopRingback });
     } catch (callError) {
@@ -212,6 +217,11 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
     if (!incomingCall) return;
     try {
       await apiRequest(`/bookings/${incomingCall.bookingId}/call-signal`, { method: 'POST', body: JSON.stringify({ type: accepted ? 'ACCEPT' : 'REJECT', callId: incomingCall.callId, mode: incomingCall.mode }) });
+      const callMessage = await apiRequest(`/messages/${incomingCall.bookingId}`, {
+        method: 'POST',
+        body: JSON.stringify({ message: accepted ? `Accepted ${incomingCall.mode === 'VIDEO' ? 'video' : 'voice'} call` : `Rejected ${incomingCall.mode === 'VIDEO' ? 'video' : 'voice'} call` }),
+      });
+      setMessages((current) => [...current, callMessage]);
       if (accepted) setCallSession({ callId: incomingCall.callId, mode: incomingCall.mode, role: 'CALLEE' });
     } catch (callError) {
       setError(callError.message || 'Unable to respond to the call.');
@@ -242,7 +252,7 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
         {showSafety && <div className="fixed inset-0 z-50" onClick={() => setShowSafety(false)}><div className="absolute inset-0 bg-ink-900/40" /><div className="absolute bottom-0 left-0 right-0 rounded-t-4xl bg-white p-5" onClick={(event) => event.stopPropagation()}><div className="mb-4 flex items-center justify-between"><h3 className="font-display text-lg font-bold">Safety</h3><button onClick={() => setShowSafety(false)}><X size={20} /></button></div><button onClick={reportUser} className="flex w-full items-center gap-3 rounded-2xl p-4 text-left hover:bg-error-50"><Flag size={20} className="text-error-500" /><span>Report {active.otherUser.name}</span></button><button onClick={blockUser} className="mt-2 flex w-full items-center gap-3 rounded-2xl p-4 text-left hover:bg-ink-50"><Shield size={20} className="text-ink-500" /><span>Block {active.otherUser.name}</span></button></div></div>}
       </div>
       <HaangoDialog open={Boolean(dialog)} {...dialog} onCancel={() => setDialog(null)} />
-      {incomingCall && <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/60 px-4" role="alertdialog" aria-modal="true"><div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl"><p className="text-xs font-semibold uppercase tracking-wider text-coral-500">Incoming {incomingCall.mode === 'VIDEO' ? 'video' : 'voice'} call</p><h2 className="mt-2 font-display text-xl font-bold text-ink-900">{active.otherUser.name} is calling</h2><p className="mt-2 text-sm text-ink-500">Accept the call to connect.</p><div className="mt-5 flex gap-3"><button onClick={() => respondToCall(false)} className="flex-1 rounded-xl bg-red-500 px-4 py-3 text-sm font-semibold text-white">Reject</button><button onClick={() => respondToCall(true)} className="flex-1 rounded-xl bg-success-500 px-4 py-3 text-sm font-semibold text-white">Accept</button></div></div></div>}
+      {incomingCall && <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/60 px-4" role="alertdialog" aria-modal="true"><div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl"><p className="text-xs font-semibold uppercase tracking-wider text-coral-500">Incoming {incomingCall.mode === 'VIDEO' ? 'video' : 'voice'} call</p><h2 className="mt-2 font-display text-xl font-bold text-ink-900">{active.otherUser.name} is calling</h2><p className="mt-2 text-sm text-ink-500">Accept the call to connect.</p><div className="mt-5 flex gap-3"><button onClick={() => respondToCall(false)} className="flex-1 rounded-xl bg-red-500 px-4 py-3 text-sm font-semibold text-white">Reject</button><button onClick={() => respondToCall(true)} className="flex-1 rounded-xl bg-green-500 px-4 py-3 text-sm font-semibold text-white">Accept</button></div></div></div>}
       {callSession && <CallScreen bookingId={active.bookingId} personName={active.otherUser.name} callId={callSession.callId} mode={callSession.mode} role={callSession.role} ringbackStop={callSession.stopRingback} onClose={() => setCallSession(null)} />}
       </>
     );
