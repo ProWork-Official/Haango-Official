@@ -102,24 +102,6 @@ export async function verifyMeetingOtp(req, res, next) {
 export async function requestCancellation(req, res, next) {
     try { res.status(201).json(success(await bookingService.requestCancellation(req.params.id, req.user._id, req.body.reason, req.body.details))); } catch (err) { next(err); }
 }
-export async function getCallStatus(req, res, next) {
-  try { res.json(success(await bookingService.getCallStatus(req.params.id, req.user._id))); } catch (err) { next(err); }
-}
-export async function sendCallSignal(req, res, next) {
-  try { res.status(201).json(success(await bookingService.sendCallSignal(req.params.id, req.user._id, req.body || {}))); } catch (err) { next(err); }
-}
-export async function getCallSignals(req, res, next) {
-  try { res.json(success(await bookingService.getCallSignals(req.params.id, req.user._id, req.query.after))); } catch (err) { next(err); }
-}
-export async function streamCallSignals(req, res, next) {
-  try {
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache, no-transform');
-    res.setHeader('Connection', 'keep-alive');
-    res.flushHeaders?.();
-    await bookingService.streamCallSignals(req.params.id, req.user._id, res);
-  } catch (err) { next(err); }
-}
 export async function updateLocation(req, res, next) {
   try { res.json(success(await bookingService.updateParticipantLocation(req.params.id, req.user._id, req.body || {}, req))); } catch (err) { next(err); }
 }

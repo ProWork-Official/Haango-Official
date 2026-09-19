@@ -11,7 +11,6 @@ import CancellationRequest from '../models/CancellationRequest.js';
 import User from '../models/User.js';
 import { sendOtpEmail } from './emailService.js';
 import LocationAccessLog from '../models/LocationAccessLog.js';
-import CallSignal from '../models/CallSignal.js';
 import { recordAdminAction } from './adminAuditService.js';
 import { creditWallet } from './customerWalletService.js';
 import { findAvailableCoupon } from './couponService.js';
@@ -251,50 +250,6 @@ async function assertCallParticipant(bookingId, userId, requireAvailable = true)
   return booking;
 }
 
-export async function getCallStatus(bookingId, userId) {
-  const booking = await Booking.findById(bookingId).select('customerId buddyId paymentStatus bookingStatus date startTime duration');
-  if (!booking) throw notFound('Booking not found');
-  assertParticipant(booking, userId);
-  const end = getMeetingEnd(booking);
-  return { available: booking.paymentStatus === 'PAID' && Date.now() < end, endsAt: new Date(end) };
-}
-
-export async function sendCallSignal(bookingId, userId, data) {
-  await assertCallParticipant(bookingId, userId);
-  if (!['REQUEST', 'ACCEPT', 'REJECT', 'END', 'OFFER', 'ANSWER', 'ICE'].includes(data.type)) throw badRequest('Invalid call signal', 'INVALID_CALL_SIGNAL');
-  const signal = await CallSignal.create({ bookingId, senderId: userId, type: data.type, callId: data.callId, mode: data.mode || 'AUDIO', payload: data.payload || {} });
-  return signal;
-}
-
-export async function getCallSignals(bookingId, userId, after = 0) {
-  await assertCallParticipant(bookingId, userId);
-  return CallSignal.find({ bookingId, senderId: { $ne: userId }, createdAt: { $gte: new Date(Date.now() - 10 * 60 * 1000) }, ...(after ? { createdAt: { $gt: new Date(after) } } : {}) }).sort({ createdAt: 1 });
-}
-
-export async function streamCallSignals(bookingId, userId, response) {
-  await assertCallParticipant(bookingId, userId, false);
-  response.write(': connected\n\n');
-  const watermark = new Date();
-  let after = watermark;
-  const recentSignals = await CallSignal.find({ bookingId, senderId: { $ne: userId }, createdAt: { $gte: new Date(Date.now() - 60 * 1000) } }).sort({ createdAt: 1 }).lean();
-  const latestByCall = new Map();
-  recentSignals.forEach((signal) => latestByCall.set(signal.callId, signal));
-  recentSignals.forEach((signal) => {
-    const latest = latestByCall.get(signal.callId);
-    if (!['REJECT', 'END'].includes(latest.type)) response.write(`data: ${JSON.stringify(signal)}\n\n`);
-  });
-  const timer = setInterval(async () => {
-    try {
-      const signals = await CallSignal.find({ bookingId, senderId: { $ne: userId }, createdAt: { $gt: after } }).sort({ createdAt: 1 }).lean();
-      signals.forEach((signal) => {
-        after = signal.createdAt;
-        response.write(`data: ${JSON.stringify(signal)}\n\n`);
-      });
-    } catch (_) { /* The stream remains open and retries on the next tick. */ }
-  }, 500);
-  const heartbeat = setInterval(() => response.write(': keep-alive\n\n'), 15000);
-  response.on('close', () => { clearInterval(timer); clearInterval(heartbeat); });
-}
 function isLocationUnlocked(booking) {
   if (['COMPLETED', 'CANCELLED', 'REJECTED'].includes(booking.bookingStatus)) return false;
   if (booking.bookingStatus === 'ONGOING') return true;
