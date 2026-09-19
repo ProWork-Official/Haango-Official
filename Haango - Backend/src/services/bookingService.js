@@ -19,6 +19,7 @@ const LOCATION_RETENTION_MS = 24 * 60 * 60 * 1000;
 const LOCATION_STALE_MS = 2 * 60 * 1000;
 const INDIA_OFFSET_MINUTES = 330;
 const callSessions = new Map();
+const callSubscribers = new Map();
 
 function getIndiaCalendarDate(value) {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -347,14 +348,14 @@ export async function getCallRoom(bookingId, userId) {
   return { roomId: booking.meeting.callRoomId, roomUrl: `${env.callProviderUrl}/${booking.meeting.callRoomId}` };
 }
 
-async function getCallBooking(bookingId, userId) {
+async function getCallBooking(bookingId, userId, requireUnlocked = true) {
   const booking = await Booking.findById(bookingId).select('customerId buddyId paymentStatus bookingStatus');
   if (!booking) throw notFound('Booking not found');
   assertParticipant(booking, userId);
   if (booking.paymentStatus !== 'PAID' || ['COMPLETED', 'CANCELLED', 'REJECTED'].includes(booking.bookingStatus)) {
     throw forbidden('Calling is unavailable for this booking');
   }
-  if (!isCallUnlocked(booking)) throw forbidden('Calls unlock within two hours of the meeting');
+  if (requireUnlocked && !isCallUnlocked(booking)) throw forbidden('Calls unlock within two hours of the meeting');
   return booking;
 }
 
@@ -379,11 +380,32 @@ export async function sendCallSignal(bookingId, userId, type, payload) {
   if (!session || !session.participants.has(String(userId))) throw forbidden('Join the call before sending a signal');
   session.messages.push({ sequence: ++session.sequence, senderId: String(userId), type, payload });
   session.lastActivity = Date.now();
+  const subscribers = callSubscribers.get(String(bookingId)) || new Set();
+  subscribers.forEach((subscriber) => {
+    if (subscriber.userId !== String(userId)) subscriber.send(session.messages.at(-1));
+  });
   return { sent: true, sequence: session.sequence };
 }
 
+export async function subscribeCallSignals(bookingId, userId, response) {
+  await getCallBooking(bookingId, userId, false);
+  const key = String(bookingId);
+  const subscriber = { userId: String(userId), response, send: (message) => response.write(`data: ${JSON.stringify(message)}\n\n`) };
+  if (!callSubscribers.has(key)) callSubscribers.set(key, new Set());
+  callSubscribers.get(key).add(subscriber);
+  const cleanup = () => {
+    callSubscribers.get(key)?.delete(subscriber);
+    if (!callSubscribers.get(key)?.size) callSubscribers.delete(key);
+  };
+  response.on('close', cleanup);
+  subscriber.heartbeat = setInterval(() => response.write(': keep-alive\n\n'), 15000);
+  response.on('close', () => clearInterval(subscriber.heartbeat));
+  response.write(': connected\n\n');
+}
+
 export async function pollCallSignals(bookingId, userId, after = 0) {
-  await getCallBooking(bookingId, userId);
+  const booking = await getCallBooking(bookingId, userId, false);
+  if (!isCallUnlocked(booking)) return [];
   const session = callSessions.get(String(bookingId));
   if (!session) return [];
   session.lastActivity = Date.now();

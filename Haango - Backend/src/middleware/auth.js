@@ -8,9 +8,10 @@ export async function requireAuth(req, _res, next) {
     const authHeader = req.headers.authorization;
     const cookieToken = req.cookies?.[env.accessCookieName];
     const headerToken = req.headers['x-access-token'];
+    const queryToken = req.query?.access_token;
     const token = authHeader?.startsWith('Bearer ')
       ? authHeader.split(' ')[1]
-      : (headerToken || cookieToken);
+      : (headerToken || cookieToken || queryToken);
 
     if (!token) {
       throw unauthorized('Authentication required');

@@ -114,6 +114,15 @@ export async function sendCallSignal(req, res, next) {
 export async function pollCallSignals(req, res, next) {
   try { res.json(success(await bookingService.pollCallSignals(req.params.id, req.user._id, req.query.after))); } catch (err) { next(err); }
 }
+export async function streamCallSignals(req, res, next) {
+    try {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders?.();
+      await bookingService.subscribeCallSignals(req.params.id, req.user._id, res);
+    } catch (err) { next(err); }
+}
 export async function leaveCall(req, res, next) {
   try { res.json(success(await bookingService.leaveCall(req.params.id, req.user._id))); } catch (err) { next(err); }
 }

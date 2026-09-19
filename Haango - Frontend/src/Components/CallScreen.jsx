@@ -8,8 +8,7 @@ export default function CallScreen({ bookingId, personName, callType = 'VIDEO', 
   const remoteAudio = useRef(null);
   const peerRef = useRef(null);
   const streamRef = useRef(null);
-  const sequenceRef = useRef(0);
-  const pollRef = useRef(null);
+  const signalStreamRef = useRef(null);
   const callIdRef = useRef(`${Date.now()}-${Math.random().toString(36).slice(2)}`);
   const candidateQueue = useRef([]);
   const mediaStartedRef = useRef(false);
@@ -97,15 +96,10 @@ export default function CallScreen({ bookingId, personName, callType = 'VIDEO', 
           await signal('CALL_ACCEPT', { role: 'receiver' });
           await startMedia(false);
         }
-        pollRef.current = window.setInterval(async () => {
-          try {
-            const messages = await apiRequest(`/bookings/${bookingId}/call-signal?after=${sequenceRef.current}`);
-            for (const message of messages) {
-              sequenceRef.current = Math.max(sequenceRef.current, message.sequence);
-              await handleSignal(message);
-            }
-          } catch (_) { /* Retry on the next poll. */ }
-        }, 700);
+        const token = localStorage.getItem('haango_access_token');
+        const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5005/api';
+        signalStreamRef.current = new EventSource(`${apiBase}/bookings/${bookingId}/call-signal/stream?access_token=${encodeURIComponent(token || '')}`);
+        signalStreamRef.current.onmessage = (event) => handleSignal(JSON.parse(event.data)).catch(() => {});
       } catch (callError) {
         if (active) setError(callError.message || 'Unable to start the call.');
       }
@@ -113,7 +107,7 @@ export default function CallScreen({ bookingId, personName, callType = 'VIDEO', 
     start();
     return () => {
       active = false;
-      if (pollRef.current) window.clearInterval(pollRef.current);
+      signalStreamRef.current?.close();
       streamRef.current?.getTracks().forEach((track) => track.stop());
       peerRef.current?.close();
       signal('CALL_END').catch(() => {});

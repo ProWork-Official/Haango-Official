@@ -27,6 +27,7 @@ router.get('/:id/call-room', requireAuth, requireBookingUser, bookingController.
 router.post('/:id/call-signal/join', requireAuth, requireBookingUser, bookingController.joinCall);
 router.post('/:id/call-signal', requireAuth, requireBookingUser, bookingController.sendCallSignal);
 router.get('/:id/call-signal', requireAuth, requireBookingUser, bookingController.pollCallSignals);
+router.get('/:id/call-signal/stream', requireAuth, requireBookingUser, bookingController.streamCallSignals);
 router.delete('/:id/call-signal', requireAuth, requireBookingUser, bookingController.leaveCall);
 router.get('/:id/locations', locationLimiter, requireAuth, requireBookingUser, bookingController.getLocations);
 router.post('/:id/location', locationLimiter, requireAuth, requireBookingUser, bookingController.updateLocation);
