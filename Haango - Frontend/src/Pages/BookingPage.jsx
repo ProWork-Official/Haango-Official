@@ -43,6 +43,10 @@ function getDayOptions() {
     date.setHours(0, 0, 0, 0);
     date.setDate(date.getDate() + index);
 
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+
     return {
       label: index === 0
         ? 'Today'
@@ -53,7 +57,7 @@ function getDayOptions() {
           month: 'short',
           day: 'numeric',
         }),
-      value: date.toISOString(),
+      value: `${year}-${month}-${day}`,
     };
   });
 }
