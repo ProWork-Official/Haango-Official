@@ -31,6 +31,8 @@ import { getDbStatus } from './config/database.js';
 
 const app = express();
 
+app.set('trust proxy', env.isProduction ? 1 : false);
+
 const isLocalDevelopmentOrigin = (origin) => (
   !env.isProduction && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
 );

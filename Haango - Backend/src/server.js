@@ -12,7 +12,7 @@ import CallLog from './models/CallLog.js';
 const httpServer = http.createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: true,
+    origin: env.corsOrigins,
     credentials: true,
   },
 });
