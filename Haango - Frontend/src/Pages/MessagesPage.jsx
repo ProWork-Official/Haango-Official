@@ -77,6 +77,7 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
   const remoteAudioRef = useRef(null);
   const callIdRef = useRef(null);
   const pendingOfferRef = useRef(null);
+  const pendingIceCandidatesRef = useRef([]);
   const callTimerRef = useRef(null);
   const callTimeoutRef = useRef(null);
 
@@ -121,6 +122,7 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
     setIsSpeakerOn(true);
     callIdRef.current = null;
     pendingOfferRef.current = null;
+    pendingIceCandidatesRef.current = [];
   };
 
   const ensureAudioPermission = async () => {
@@ -137,7 +139,7 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
     return stream;
   };
 
-  const setupPeerConnection = (stream) => {
+  const setupPeerConnection = (stream, peerId) => {
     const peerConnection = new window.RTCPeerConnection({
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -158,12 +160,12 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
     };
 
     peerConnection.onicecandidate = (event) => {
-      if (!event.candidate || !socketRef.current || !callIdRef.current || !callPeer) return;
+      if (!event.candidate || !socketRef.current || !callIdRef.current || !peerId) return;
       socketRef.current.emit('webrtc:ice-candidate', {
         type: 'webrtc:ice-candidate',
         callId: callIdRef.current,
         fromUserId: profile?.id,
-        toUserId: callPeer.id,
+        toUserId: peerId,
         candidate: event.candidate,
       });
     };
@@ -191,7 +193,7 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
 
     try {
       const stream = await ensureAudioPermission();
-      const peerConnection = setupPeerConnection(stream);
+      const peerConnection = setupPeerConnection(stream, peerInfo.id);
       const offer = await peerConnection.createOffer();
       await peerConnection.setLocalDescription(offer);
 
@@ -247,9 +249,11 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
       playCallAcceptedTone();
 
       const stream = await ensureAudioPermission();
-      const peerConnection = setupPeerConnection(stream);
+      const peerConnection = setupPeerConnection(stream, callPeer.id);
 
       await peerConnection.setRemoteDescription(new window.RTCSessionDescription(pendingOfferRef.current));
+      const pendingCandidates = pendingIceCandidatesRef.current.splice(0);
+      await Promise.all(pendingCandidates.map((candidate) => peerConnection.addIceCandidate(candidate)));
       const answer = await peerConnection.createAnswer();
       await peerConnection.setLocalDescription(answer);
 
@@ -312,13 +316,53 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
     cleanupCallSession();
   };
 
+  const renderCallOverlay = () => (
+    <>
+      <audio ref={remoteAudioRef} autoPlay playsInline />
+
+      <CallScreen
+        visible={callState !== 'idle'}
+        peer={callPeer || active?.otherUser}
+        callState={callState}
+        callType={callType}
+        isMuted={isMuted}
+        isSpeakerOn={isSpeakerOn}
+        callDuration={callDuration}
+        onAccept={acceptIncomingCall}
+        onReject={rejectCall}
+        onEnd={endCall}
+        onToggleMute={() => {
+          setIsMuted((current) => {
+            const next = !current;
+            if (localStreamRef.current) {
+              localStreamRef.current.getAudioTracks().forEach((track) => {
+                track.enabled = !next;
+              });
+            }
+            return next;
+          });
+        }}
+        onToggleSpeaker={() => {
+          setIsSpeakerOn((current) => {
+            const next = !current;
+            if (remoteAudioRef.current) {
+              remoteAudioRef.current.muted = !next;
+            }
+            return next;
+          });
+        }}
+      />
+    </>
+  );
+
   useEffect(() => {
     if (!profile?.id) return undefined;
 
     const socket = io(SOCKET_URL, {
       autoConnect: true,
-      transports: ['websocket'],
       withCredentials: true,
+      reconnection: true,
+      reconnectionAttempts: 5,
       auth: {
         token: localStorage.getItem('haango_access_token'),
       },
@@ -356,9 +400,27 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
 
     socket.on('call:answer', (payload) => {
       if (!payload || String(payload.toUserId) !== String(profile.id)) return;
-      stopCallTone();
-      setCallState('connected');
-      startCallTimer();
+      const applyAnswer = async () => {
+        if (!peerConnectionRef.current || !payload.answer) return;
+
+        try {
+          await peerConnectionRef.current.setRemoteDescription(
+            new window.RTCSessionDescription(payload.answer)
+          );
+          const pendingCandidates = pendingIceCandidatesRef.current.splice(0);
+          await Promise.all(pendingCandidates.map((candidate) => (
+            peerConnectionRef.current.addIceCandidate(candidate)
+          )));
+          stopCallTone();
+          setCallState('connected');
+          startCallTimer();
+        } catch (callError) {
+          setError(callError.message || 'Unable to connect the voice call.');
+          cleanupCallSession();
+        }
+      };
+
+      applyAnswer();
     });
 
     socket.on('call:reject', (payload) => {
@@ -384,10 +446,15 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
 
     socket.on('webrtc:ice-candidate', async (payload) => {
       if (!payload || String(payload.toUserId) !== String(profile.id)) return;
-      if (!peerConnectionRef.current || !payload.candidate) return;
+      if (!payload.candidate) return;
 
       try {
-        await peerConnectionRef.current.addIceCandidate(new window.RTCIceCandidate(payload.candidate));
+        const candidate = new window.RTCIceCandidate(payload.candidate);
+        if (!peerConnectionRef.current?.remoteDescription) {
+          pendingIceCandidatesRef.current.push(candidate);
+          return;
+        }
+        await peerConnectionRef.current.addIceCandidate(candidate);
       } catch (_) {
         // ignore transient ICE issues
       }
@@ -655,40 +722,7 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
           )}
         </div>
 
-        <audio ref={remoteAudioRef} autoPlay playsInline />
-
-        <CallScreen
-          visible={callState !== 'idle'}
-          peer={callPeer || active.otherUser}
-          callState={callState}
-          callType={callType}
-          isMuted={isMuted}
-          isSpeakerOn={isSpeakerOn}
-          callDuration={callDuration}
-          onAccept={acceptIncomingCall}
-          onReject={rejectCall}
-          onEnd={endCall}
-          onToggleMute={() => {
-            setIsMuted((current) => {
-              const next = !current;
-              if (localStreamRef.current) {
-                localStreamRef.current.getAudioTracks().forEach((track) => {
-                  track.enabled = !next;
-                });
-              }
-              return next;
-            });
-          }}
-          onToggleSpeaker={() => {
-            setIsSpeakerOn((current) => {
-              const next = !current;
-              if (remoteAudioRef.current) {
-                remoteAudioRef.current.muted = !next;
-              }
-              return next;
-            });
-          }}
-        />
+        {renderCallOverlay()}
 
         <HaangoDialog open={Boolean(dialog)} {...dialog} onCancel={() => setDialog(null)} />
       </>
@@ -733,6 +767,7 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
           </div>
         )}
       </div>
+      {renderCallOverlay()}
     </div>
   );
 }
