@@ -85,7 +85,6 @@ export default function CallScreen({ bookingId, personName, callId, mode, role, 
   useEffect(() => {
     if (acceptedProp) {
       setAccepted(true);
-      markConnected();
     }
   }, [acceptedProp]);
 
@@ -114,14 +113,12 @@ export default function CallScreen({ bookingId, personName, callId, mode, role, 
             if (signal.callId !== callId) return;
             if (signal.type === 'ACCEPT' && role === 'CALLER') {
               setAccepted(true);
-              markConnected();
               if (unansweredTimeoutRef.current) window.clearTimeout(unansweredTimeoutRef.current);
               ringbackStopRef.current();
               await startMedia(true);
             }
             if (signal.type === 'ACCEPT' && role === 'CALLEE') {
               setAccepted(true);
-              markConnected();
               if (unansweredTimeoutRef.current) window.clearTimeout(unansweredTimeoutRef.current);
               ringbackStopRef.current();
             }
@@ -198,7 +195,7 @@ export default function CallScreen({ bookingId, personName, callId, mode, role, 
   };
 
   return (
-    <div className="fixed inset-0 z-100 flex flex-col bg-[#101114] text-white">
+    <div className="fixed inset-0 z-100 flex flex-col h-96 w-96 bg-[#101114] text-white">
       <div className="flex items-center justify-between px-5 py-4"><div><p className="text-xs uppercase tracking-[0.2em] text-white/50">Haango {mode === 'VIDEO' ? 'video' : 'voice'} call</p><h2 className="mt-1 text-lg font-bold">{personName}</h2></div><span className="text-xs text-white/60">{connected ? 'Connected' : accepted ? 'Accepted, connecting...' : role === 'CALLER' ? 'Calling...' : 'Connecting...'}</span></div>
       <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-[#191b20] p-4" onClick={() => { const element = remoteAudio.current || remoteVideo.current; element?.play().catch(() => {}); }}>
         {mode === 'VIDEO' ? <><video ref={remoteVideo} autoPlay playsInline className="h-full max-h-[72vh] w-full rounded-3xl object-cover" /><video ref={localVideo} autoPlay muted playsInline className="absolute bottom-6 right-6 h-32 w-24 rounded-2xl border border-white/20 bg-black object-cover shadow-2xl" /></> : <><audio ref={remoteAudio} autoPlay /><div className="text-center"><div className="mx-auto flex h-28 w-28 items-center justify-center rounded-full bg-white/10 text-4xl font-bold">{personName?.[0]?.toUpperCase() || '?'}</div><p className="mt-4 text-lg font-semibold">Voice call</p></div></>}
