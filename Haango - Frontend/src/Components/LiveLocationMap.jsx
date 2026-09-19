@@ -1,45 +1,89 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
-function project(latitude, longitude, zoom) {
-  const scale = 256 * (2 ** zoom);
-  const x = ((longitude + 180) / 360) * scale;
-  const sine = Math.sin((latitude * Math.PI) / 180);
-  const y = (0.5 - Math.log((1 + sine) / (1 - sine)) / (4 * Math.PI)) * scale;
-  return { x, y };
+let googleMapsPromise;
+
+function loadGoogleMaps() {
+  if (window.google?.maps) return Promise.resolve(window.google.maps);
+  if (googleMapsPromise) return googleMapsPromise;
+
+  const key = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+  if (!key) return Promise.reject(new Error('Google Maps API key is missing.'));
+
+  googleMapsPromise = new Promise((resolve, reject) => {
+    const existingScript = document.querySelector('script[data-google-maps]');
+    if (existingScript) {
+      existingScript.addEventListener('load', () => resolve(window.google.maps), { once: true });
+      existingScript.addEventListener('error', () => reject(new Error('Google Maps failed to load.')), { once: true });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.dataset.googleMaps = 'true';
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=places`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => resolve(window.google.maps);
+    script.onerror = () => reject(new Error('Google Maps failed to load. Check the API key and referrer restrictions.'));
+    document.head.appendChild(script);
+  });
+
+  return googleMapsPromise;
 }
 
 export default function LiveLocationMap({ locations, onClose, onRefresh }) {
+  const mapElement = useRef(null);
+  const mapRef = useRef(null);
+  const markersRef = useRef([]);
+  const [mapError, setMapError] = useState('');
+
   useEffect(() => {
     if (!onRefresh) return undefined;
     const interval = window.setInterval(onRefresh, 10000);
     return () => window.clearInterval(interval);
   }, [onRefresh]);
+
+  useEffect(() => {
+    if (!locations?.length || !mapElement.current) return undefined;
+    let active = true;
+
+    loadGoogleMaps().then((maps) => {
+      if (!active || !mapElement.current) return;
+      if (!mapRef.current) {
+        mapRef.current = new maps.Map(mapElement.current, {
+          center: { lat: Number(locations[0].latitude), lng: Number(locations[0].longitude) },
+          zoom: 14, mapTypeControl: false, streetViewControl: false, fullscreenControl: false,
+        });
+      }
+      markersRef.current.forEach((marker) => marker.setMap(null));
+      markersRef.current = locations.map((location) => {
+        return new maps.Marker({
+          map: mapRef.current,
+          position: { lat: Number(location.latitude), lng: Number(location.longitude) },
+          title: location.isCurrent ? 'Your live location' : 'Companion live location',
+          label: location.isCurrent ? 'Y' : 'C',
+          icon: {
+            path: maps.SymbolPath.CIRCLE,
+            scale: 9,
+            fillColor: location.isCurrent ? '#2563eb' : '#16a34a',
+            fillOpacity: 1,
+            strokeColor: '#ffffff',
+            strokeWeight: 2,
+          },
+        });
+      });
+      const bounds = new maps.LatLngBounds();
+      locations.forEach((location) => bounds.extend({ lat: Number(location.latitude), lng: Number(location.longitude) }));
+      mapRef.current.fitBounds(bounds, 80);
+      if (locations.length === 1) mapRef.current.setZoom(15);
+      setMapError('');
+    }).catch((error) => {
+      if (active) setMapError(error.message || 'Unable to load Google Maps.');
+    });
+
+    return () => { active = false; };
+  }, [locations]);
+
   if (!locations?.length) return null;
-  const minLatitude = Math.min(...locations.map((item) => item.latitude));
-  const maxLatitude = Math.max(...locations.map((item) => item.latitude));
-  const minLongitude = Math.min(...locations.map((item) => item.longitude));
-  const maxLongitude = Math.max(...locations.map((item) => item.longitude));
-  const centerLatitude = (minLatitude + maxLatitude) / 2;
-  const centerLongitude = (minLongitude + maxLongitude) / 2;
-  const spread = Math.max(maxLatitude - minLatitude, maxLongitude - minLongitude, 0.002);
-  const zoom = Math.max(11, Math.min(17, Math.floor(Math.log2(360 / (spread * 3)))));
-  const center = project(centerLatitude, centerLongitude, zoom);
-  const markers = locations.map((location) => {
-    const point = project(location.latitude, location.longitude, zoom);
-    return {
-      ...location,
-      left: (point.x - center.x),
-      top: (point.y - center.y),
-    };
-  });
-  const tileX = Math.floor(center.x / 256);
-  const tileY = Math.floor(center.y / 256);
-  const tiles = [];
-  for (let x = tileX - 2; x <= tileX + 2; x += 1) {
-    for (let y = tileY - 2; y <= tileY + 2; y += 1) {
-      tiles.push({ x, y, left: (x - tileX) * 256 - (center.x % 256), top: (y - tileY) * 256 - (center.y % 256) });
-    }
-  }
 
   return (
     <div className="mt-4 rounded-2xl border border-ink-200 bg-white p-3">
@@ -50,16 +94,9 @@ export default function LiveLocationMap({ locations, onClose, onRefresh }) {
         </div>
         <button onClick={onClose} className="text-sm font-semibold text-ink-500">Close map</button>
       </div>
-      <div className="relative mt-3 h-80 overflow-hidden rounded-xl bg-sky-100">
-        {tiles.map((tile) => (
-          <img key={`${tile.x}:${tile.y}`} alt="" src={`https://tile.openstreetmap.org/${zoom}/${tile.x}/${tile.y}.png`} className="pointer-events-none absolute max-w-none" style={{ left: `calc(50% + ${tile.left}px)`, top: `calc(50% + ${tile.top}px)`, width: 256, height: 256 }} />
-        ))}
-        {markers.map((marker) => (
-          <span key={String(marker.userId)} title={marker.isCurrent ? 'Your live location' : 'Companion live location'} className={`absolute z-10 h-5 w-5 -translate-x-1/2 -translate-y-full rounded-full border-2 border-white shadow-lg ${marker.isCurrent ? 'bg-blue-600' : 'bg-green-600'}`} style={{ left: `calc(50% + ${marker.left}px)`, top: `calc(50% + ${marker.top}px)` }} />
-        ))}
-      </div>
+      {mapError ? <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-700">{mapError}</p> : <div ref={mapElement} className="relative mt-3 h-80 overflow-hidden rounded-xl bg-sky-100" />}
       <div className="mt-3 flex flex-wrap gap-3 text-xs text-ink-600">
-        {markers.map((marker) => <span key={String(marker.userId)}>{marker.isCurrent ? 'Your location' : 'Companion location'} · {marker.isStale ? 'Stale · ' : ''}{new Date(marker.updatedAt).toLocaleTimeString()}</span>)}
+        {locations.map((location) => <span key={String(location.userId)}>{location.isCurrent ? 'Your location' : 'Companion location'} · {location.isStale ? 'Stale · ' : ''}{new Date(location.updatedAt).toLocaleTimeString()}</span>)}
       </div>
     </div>
   );

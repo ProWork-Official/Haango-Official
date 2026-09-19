@@ -1,7 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Calendar, Clock, MapPin, MessageCircle } from 'lucide-react';
 import { apiRequest } from '../lib/api';
+import { getCurrentLocation } from '../lib/location';
 import LiveLocationMap from '../Components/LiveLocationMap';
+
+function getIndiaCalendarDate(value) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date(value));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return new Date(Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day)));
+}
 
 export default function BuddyBookingsPage({ onBack, onMessage }) {
   const [bookings, setBookings] = useState([]);
@@ -68,12 +80,30 @@ export default function BuddyBookingsPage({ onBack, onMessage }) {
   };
 
   const meetingStart = (booking) => {
-    const [hours, minutes] = String(booking.startTime || '').split(':').map(Number);
-    const date = new Date(booking.date);
-    date.setHours(hours || 0, minutes || 0, 0, 0);
+    const timeValue = String(booking.startTime || '').trim().toUpperCase();
+    const twelveHourMatch = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/.exec(timeValue);
+    const twentyFourHourMatch = /^(\d{1,2}):(\d{2})$/.exec(timeValue);
+    const match = twelveHourMatch || twentyFourHourMatch;
+    if (!match) return Number.NaN;
+
+    let hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    if (twelveHourMatch) {
+      if (hours === 12) hours = 0;
+      if (match[3] === 'PM') hours += 12;
+    }
+
+    const date = getIndiaCalendarDate(booking.date);
+    date.setUTCHours(hours, minutes, 0, 0);
+    date.setTime(date.getTime() - 330 * 60 * 1000);
     return date.getTime();
   };
-  const locationUnlocked = (booking) => Date.now() >= meetingStart(booking) - 2 * 60 * 60 * 1000;
+  const locationUnlocked = (booking) => {
+    if (booking.bookingStatus === 'ONGOING') return true;
+    const start = meetingStart(booking);
+    const end = start + Number(booking.duration || 0) * 60 * 60 * 1000;
+    return Date.now() >= start - 2 * 60 * 60 * 1000 && Date.now() < end;
+  };
   const showLiveMap = (booking) => {
     if (!locationUnlocked(booking)) {
       setLocationError('Location sharing unlocks 2 hours before the meeting.');
@@ -83,7 +113,7 @@ export default function BuddyBookingsPage({ onBack, onMessage }) {
       setLocationError('Location sharing is not supported by this browser.');
       return;
     }
-    navigator.geolocation.getCurrentPosition(async ({ coords }) => {
+    getCurrentLocation().then(async ({ coords }) => {
       try {
         await apiRequest(`/bookings/${booking._id}/location`, { method: 'POST', body: JSON.stringify({ latitude: coords.latitude, longitude: coords.longitude, accuracy: coords.accuracy }) });
         const next = await apiRequest(`/bookings/${booking._id}/locations`);
@@ -98,7 +128,16 @@ export default function BuddyBookingsPage({ onBack, onMessage }) {
       } catch (locationLoadError) {
         setLocationError(locationLoadError.message || 'Unable to load live locations.');
       }
-    }, () => setLocationError('Please allow location access to view the live map.'), { enableHighAccuracy: true, timeout: 15000 });
+    }).catch((positionError) => {
+      const messages = {
+        1: positionError.permissionState === 'denied'
+          ? 'Location permission is blocked for this site. Allow location access, then try again.'
+          : 'The site permission is allowed, but your browser or Windows location service did not return a location. Turn on device location services and try again.',
+        2: 'Your device could not determine its location. Check that device location services are enabled, then try again.',
+        3: 'Location lookup timed out. Check your connection and device location services, then try again.',
+      };
+      setLocationError(messages[positionError.code] || 'Unable to read your location. Check your browser and device location settings.');
+    });
   };
 
   return (

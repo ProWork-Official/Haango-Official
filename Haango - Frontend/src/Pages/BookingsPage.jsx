@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Calendar, CheckCircle2, ChevronRight, Clock3, Lock, MapPin, MessageCircle, ShieldCheck, X, XCircle } from 'lucide-react';
 import { apiRequest } from '../lib/api';
+import { getCurrentLocation } from '../lib/location';
 import haangoLogo from '../Assets/Icon/S_Blue.png';
 import { useAuth } from '../lib/auth';
 import ReviewEditor from '../Components/ReviewEditor';
@@ -24,6 +25,17 @@ function formatDate(value) {
   });
 }
 
+function getIndiaCalendarDate(value) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date(value));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return new Date(Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day)));
+}
+
 export default function BookingsPage({ onBack, onMessage }) {
   const { profile } = useAuth();
   const [bookings, setBookings] = useState([]);
@@ -31,7 +43,7 @@ export default function BookingsPage({ onBack, onMessage }) {
   const [error, setError] = useState('');
   const [cancelling, setCancelling] = useState(null);
   const [paying, setPaying] = useState(null);
-  const [currentTime] = useState(() => Date.now());
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
   const [reviewBooking, setReviewBooking] = useState(null);
   const [reviewError, setReviewError] = useState('');
   const [locations, setLocations] = useState({});
@@ -41,6 +53,10 @@ export default function BookingsPage({ onBack, onMessage }) {
   const [dialog, setDialog] = useState(null);
   const [cancellationRequested, setCancellationRequested] = useState(() => JSON.parse(localStorage.getItem('haango_cancellation_requests') || '{}'));
   const locationWatches = useRef({});
+  useEffect(() => {
+    const timer = window.setInterval(() => setCurrentTime(Date.now()), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
   useEffect(() => () => Object.values(locationWatches.current).forEach((watchId) => navigator.geolocation?.clearWatch(watchId)), []);
 
   const openReview = async (booking) => {
@@ -94,9 +110,8 @@ export default function BookingsPage({ onBack, onMessage }) {
   const cancelBooking = async (bookingId) => {
     const booking = bookings.find((item) => item._id === bookingId);
     if (!booking || cancellationRequested[bookingId]) return;
-    const [h, m] = String(booking.startTime || '').split(':').map(Number);
-    const start = new Date(booking.date); start.setHours(h || 0, m || 0, 0, 0);
-    const locked = currentTime >= start.getTime() - 7200000;
+    const start = meetingStartTime(booking);
+    const locked = currentTime >= start - 7200000 && currentTime < start;
     setDialog({
       title: locked ? 'Request booking cancellation' : 'Cancel this booking?',
       description: locked ? 'This booking is inside the cancellation lock window. Customer support will review your request.' : 'This action will cancel your booking and begin any eligible refund process.',
@@ -157,16 +172,41 @@ export default function BookingsPage({ onBack, onMessage }) {
   };
 
   const meetingStartTime = (booking) => {
-    const [hours, minutes] = String(booking.startTime || '').split(':').map(Number);
-    const date = new Date(booking.date);
-    date.setHours(hours || 0, minutes || 0, 0, 0);
+    const timeValue = String(booking.startTime || '').trim().toUpperCase();
+    const twelveHourMatch = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/.exec(timeValue);
+    const twentyFourHourMatch = /^(\d{1,2}):(\d{2})$/.exec(timeValue);
+    const match = twelveHourMatch || twentyFourHourMatch;
+    if (!match) return Number.NaN;
+
+    let hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    if (twelveHourMatch) {
+      if (hours === 12) hours = 0;
+      if (match[3] === 'PM') hours += 12;
+    }
+
+    const date = getIndiaCalendarDate(booking.date);
+    date.setUTCHours(hours, minutes, 0, 0);
+    date.setTime(date.getTime() - 330 * 60 * 1000);
     return date.getTime();
   };
 
-  const locationUnlocked = (booking) => Date.now() >= meetingStartTime(booking) - 2 * 60 * 60 * 1000;
+  const locationUnlocked = (booking) => booking.bookingStatus === 'ONGOING' || (currentTime >= meetingStartTime(booking) - 2 * 60 * 60 * 1000 && currentTime < meetingEndTime(booking));
+  const meetingEndTime = (booking) => meetingStartTime(booking) + Number(booking.duration || 0) * 60 * 60 * 1000;
+  const meetingHasStarted = (booking) => currentTime >= meetingStartTime(booking);
+  const meetingHasEnded = (booking) => currentTime >= meetingEndTime(booking);
+  const locationSharingEnded = (booking) => booking.bookingStatus === 'COMPLETED' || (booking.bookingStatus !== 'ONGOING' && meetingHasEnded(booking));
+
+  useEffect(() => {
+    bookings.forEach((booking) => {
+      if (!locationSharingEnded(booking) || !locationWatches.current[booking._id]) return;
+      navigator.geolocation?.clearWatch(locationWatches.current[booking._id]);
+      delete locationWatches.current[booking._id];
+    });
+  }, [bookings, currentTime]);
 
   const showLiveMap = (booking) => {
-    if (!locationUnlocked(booking)) {
+    if (!locationUnlocked(booking) || locationSharingEnded(booking)) {
       setLocationMessage('Location sharing unlocks 2 hours before the meeting.');
       return;
     }
@@ -174,7 +214,17 @@ export default function BookingsPage({ onBack, onMessage }) {
       setLocationMessage('Location sharing is not supported by this browser.');
       return;
     }
-    navigator.geolocation.getCurrentPosition(async ({ coords }) => {
+    const handlePositionError = (positionError) => {
+      const messages = {
+        1: positionError.permissionState === 'denied'
+          ? 'Location permission is blocked for this site. Allow location access, then try again.'
+          : 'The site permission is allowed, but your browser or Windows location service did not return a location. Turn on device location services and try again.',
+        2: 'Your device could not determine its location. Check that device location services are enabled, then try again.',
+        3: 'Location lookup timed out. Check your connection and device location services, then try again.',
+      };
+      setLocationMessage(messages[positionError.code] || 'Unable to read your location. Check your browser and device location settings.');
+    };
+    getCurrentLocation().then(async ({ coords }) => {
       try {
         await apiRequest(`/bookings/${booking._id}/location`, { method: 'POST', body: JSON.stringify({ latitude: coords.latitude, longitude: coords.longitude, accuracy: coords.accuracy }) });
         const next = await apiRequest(`/bookings/${booking._id}/locations`);
@@ -189,7 +239,7 @@ export default function BookingsPage({ onBack, onMessage }) {
       } catch (locationError) {
         setLocationMessage(locationError.message || 'Unable to load live locations.');
       }
-    }, () => setLocationMessage('Please allow location access to view the live map.'), { enableHighAccuracy: true, timeout: 15000 });
+    }).catch(handlePositionError);
   };
 
   const extendMeeting = async (booking) => {
@@ -279,7 +329,8 @@ export default function BookingsPage({ onBack, onMessage }) {
     const buddy = booking.buddyProfileId;
     const activity = booking.activityId;
     const startOtpLocked = currentTime < meetingStartTime(booking) - 60 * 60 * 1000;
-    const locationLocked = !locationUnlocked(booking);
+    const locationLocked = !locationUnlocked(booking) || locationSharingEnded(booking);
+    const locationWindowOpen = locationUnlocked(booking) && !locationSharingEnded(booking);
     const isConfirmed = booking.bookingStatus === 'CONFIRMED' || booking.paymentStatus === 'PAID';
 
     return (
@@ -337,13 +388,19 @@ export default function BookingsPage({ onBack, onMessage }) {
           </div>
         </div>
 
-        {!['COMPLETED', 'CANCELLED', 'REJECTED'].includes(booking.bookingStatus) && (
+        {booking.bookingStatus === 'COMPLETED' ? (
           <div className="mt-4">
-            <button onClick={() => cancelBooking(booking._id)} disabled={cancelling === booking._id || paying === booking._id || cancellationRequested[booking._id]} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#ff7c4d] px-4 py-3 text-base font-bold text-white shadow-[0_8px_20px_rgba(255,124,77,0.28)] transition hover:bg-[#f36f41] disabled:cursor-not-allowed disabled:opacity-60 sm:w-full">
-              <XCircle size={18} /> {cancellationRequested[booking._id] ? 'Request sent to customer support' : cancelling === booking._id ? 'Cancelling...' : 'Cancel booking'}
+            <button disabled className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-2xl bg-[#d9d4ce] px-4 py-3 text-base font-bold text-ink-600 sm:w-full">
+              <CheckCircle2 size={18} /> Booking completed
             </button>
           </div>
-        )}
+        ) : !['CANCELLED', 'REJECTED', 'ONGOING'].includes(booking.bookingStatus) && !meetingHasStarted(booking) ? (
+          <div className="mt-4">
+            <button onClick={() => cancelBooking(booking._id)} disabled={cancelling === booking._id || paying === booking._id || cancellationRequested[booking._id]} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#ff7c4d] px-4 py-3 text-base font-bold text-white shadow-[0_8px_20px_rgba(255,124,77,0.28)] transition hover:bg-[#f36f41] disabled:cursor-not-allowed disabled:opacity-60 sm:w-full">
+              <XCircle size={18} /> {cancellationRequested[booking._id] ? 'Request sent to customer support' : cancelling === booking._id ? 'Cancelling...' : locationWindowOpen ? 'Request cancellation' : 'Cancel booking'}
+            </button>
+          </div>
+        ) : null}
 
         {booking.paymentStatus === 'PAID' && !['CANCELLED', 'REJECTED'].includes(booking.bookingStatus) && (
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -352,8 +409,8 @@ export default function BookingsPage({ onBack, onMessage }) {
                 <MapPin size={20} />
               </div>
               <div>
-                <p className="text-xl font-extrabold text-ink-900">Location unlocks</p>
-                <p className="text-sm text-ink-600">{locationLocked ? '2h before meeting' : 'Unlocked now'}</p>
+                <p className="text-xl font-extrabold text-ink-900">{locationSharingEnded(booking) ? 'Location locked' : 'Location unlocks'}</p>
+                <p className="text-sm text-ink-600">{booking.bookingStatus === 'COMPLETED' ? 'Meeting successfully completed' : locationSharingEnded(booking) ? 'Meeting time ended' : locationLocked ? '2h before meeting' : 'Unlocked now'}</p>
               </div>
             </div>
 
@@ -369,17 +426,17 @@ export default function BookingsPage({ onBack, onMessage }) {
           </div>
         )}
 
-        {booking.paymentStatus === 'PAID' && !['CANCELLED', 'REJECTED'].includes(booking.bookingStatus) && (
+        {booking.paymentStatus === 'PAID' && !['COMPLETED', 'CANCELLED', 'REJECTED'].includes(booking.bookingStatus) && (
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             <button onClick={() => onMessage(booking._id)} className="inline-flex items-center justify-center gap-3 rounded-[18px] border border-[#d6d2cd] bg-white px-4 py-3 text-base font-semibold text-ink-800 transition hover:bg-ink-50">
               <MessageCircle size={18} /> Message buddy
             </button>
             <button
-              onClick={() => !locationLocked && showLiveMap(booking)}
+              onClick={() => locationWindowOpen && showLiveMap(booking)}
               disabled={locationLocked}
               className={`inline-flex items-center justify-center gap-3 rounded-[18px] border px-4 py-3 text-base font-semibold transition ${locationLocked ? 'cursor-not-allowed border-[#e5dfd7] bg-[#f3efe9] text-ink-400' : 'border-[#d6d2cd] bg-white text-ink-800 hover:bg-ink-50'}`}
             >
-              <MapPin size={18} /> Show companion location
+              <MapPin size={18} /> {locationSharingEnded(booking) ? 'Location locked' : 'Show companion location'}
             </button>
           </div>
         )}
