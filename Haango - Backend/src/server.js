@@ -77,16 +77,18 @@ io.use(async (socket, next) => {
 });
 
 io.on('connection', (socket) => {
+  socket.join(socket.user.id);
+
   socket.on('join-user', (userId) => {
     const safeUserId = normalizeUserId(userId);
-    if (!safeUserId) return;
+    if (!safeUserId || safeUserId !== socket.user.id) return;
     socket.join(safeUserId);
   });
 
   socket.on('call:invite', async (payload) => {
-    const fromUserId = normalizeUserId(payload?.fromUserId) || socket.user?.id;
+    const fromUserId = socket.user?.id;
     const toUserId = normalizeUserId(payload?.toUserId);
-    if (!fromUserId || !toUserId) return;
+    if (!fromUserId || !toUserId || fromUserId === toUserId) return;
 
     const callId = payload?.callId || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const callRecord = {
@@ -139,7 +141,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('call:answer', async (payload) => {
-    const fromUserId = normalizeUserId(payload?.fromUserId) || socket.user?.id;
+    const fromUserId = socket.user?.id;
     const toUserId = normalizeUserId(payload?.toUserId);
     const callId = normalizeUserId(payload?.callId);
     if (!fromUserId || !toUserId || !callId) return;
@@ -161,7 +163,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('call:reject', async (payload) => {
-    const fromUserId = normalizeUserId(payload?.fromUserId) || socket.user?.id;
+    const fromUserId = socket.user?.id;
     const toUserId = normalizeUserId(payload?.toUserId);
     const callId = normalizeUserId(payload?.callId);
     if (!fromUserId || !toUserId || !callId) return;
@@ -183,7 +185,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('call:end', async (payload) => {
-    const fromUserId = normalizeUserId(payload?.fromUserId) || socket.user?.id;
+    const fromUserId = socket.user?.id;
     const toUserId = normalizeUserId(payload?.toUserId);
     const callId = normalizeUserId(payload?.callId);
     if (!fromUserId || !toUserId || !callId) return;
@@ -206,7 +208,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('call:timeout', async (payload) => {
-    const fromUserId = normalizeUserId(payload?.fromUserId) || socket.user?.id;
+    const fromUserId = socket.user?.id;
     const toUserId = normalizeUserId(payload?.toUserId);
     const callId = normalizeUserId(payload?.callId);
     if (!fromUserId || !toUserId || !callId) return;
@@ -233,14 +235,17 @@ io.on('connection', (socket) => {
   });
 
   socket.on('webrtc:offer', (payload) => {
+    if (normalizeUserId(payload?.fromUserId) !== socket.user.id) return;
     emitCallEvent('webrtc:offer', payload);
   });
 
   socket.on('webrtc:answer', (payload) => {
+    if (normalizeUserId(payload?.fromUserId) !== socket.user.id) return;
     emitCallEvent('webrtc:answer', payload);
   });
 
   socket.on('webrtc:ice-candidate', (payload) => {
+    if (normalizeUserId(payload?.fromUserId) !== socket.user.id) return;
     emitCallEvent('webrtc:ice-candidate', payload);
   });
 
