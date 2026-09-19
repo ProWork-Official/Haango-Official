@@ -1,46 +1,84 @@
-function getAudioContext() {
+let audioContext = null;
+let ringtoneTimer = null;
+
+function ensureAudioContext() {
+  if (typeof window === 'undefined') return null;
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  return AudioContextClass ? new AudioContextClass() : null;
+  if (!AudioContextClass) return null;
+
+  if (!audioContext) {
+    audioContext = new AudioContextClass();
+  }
+
+  if (audioContext.state === 'suspended') {
+    audioContext.resume().catch(() => {});
+  }
+
+  return audioContext;
 }
 
-function playTone(context, frequency, duration, startAt, volume = 0.04) {
+function createTone(context, frequency, duration, volume = 0.05, delay = 0) {
+  const startAt = context.currentTime + delay;
   const oscillator = context.createOscillator();
-  const gain = context.createGain();
+  const gainNode = context.createGain();
+
   oscillator.type = 'sine';
-  oscillator.frequency.value = frequency;
-  gain.gain.setValueAtTime(0.0001, startAt);
-  gain.gain.exponentialRampToValueAtTime(volume, startAt + 0.02);
-  gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration - 0.02);
-  oscillator.connect(gain);
-  gain.connect(context.destination);
+  oscillator.frequency.setValueAtTime(frequency, startAt);
+
+  gainNode.gain.setValueAtTime(0.0001, startAt);
+  gainNode.gain.exponentialRampToValueAtTime(volume, startAt + 0.02);
+  gainNode.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
+
+  oscillator.connect(gainNode);
+  gainNode.connect(context.destination);
+
   oscillator.start(startAt);
-  oscillator.stop(startAt + duration);
+  oscillator.stop(startAt + duration + 0.04);
 }
 
-export function startCallTone(kind = 'ringback') {
-  const context = getAudioContext();
+export function startCallTone(mode = 'outgoing') {
+  const context = ensureAudioContext();
   if (!context) return () => {};
-  let stopped = false;
-  let timer;
-  const pattern = kind === 'incoming'
-    ? [{ frequency: 880, duration: 0.22 }, { frequency: 660, duration: 0.22 }]
-    : [{ frequency: 480, duration: 0.35 }, { frequency: 620, duration: 0.35 }];
-  const interval = kind === 'incoming' ? 1800 : 2400;
 
-  const playPattern = () => {
-    if (stopped) return;
-    if (context.state === 'suspended') context.resume().catch(() => {});
-    const startAt = context.currentTime + 0.01;
-    pattern.forEach((tone, index) => {
-      playTone(context, tone.frequency, tone.duration, startAt + index * (tone.duration + 0.04));
-    });
-    timer = window.setTimeout(playPattern, interval);
+  stopCallTone();
+
+  const tones = mode === 'incoming'
+    ? [660, 540, 660, 540]
+    : [440, 520, 620, 520];
+
+  let index = 0;
+  const playStep = () => {
+    const frequency = tones[index % tones.length];
+    createTone(context, frequency, 0.25, 0.04, 0.06);
+    index += 1;
+    ringtoneTimer = window.setTimeout(playStep, 480);
   };
 
-  playPattern();
-  return () => {
-    stopped = true;
-    window.clearTimeout(timer);
-    context.close().catch(() => {});
-  };
+  playStep();
+
+  return () => stopCallTone();
 }
+
+export function stopCallTone() {
+  if (ringtoneTimer) {
+    window.clearTimeout(ringtoneTimer);
+    ringtoneTimer = null;
+  }
+}
+
+export function playCallEndedTone() {
+  const context = ensureAudioContext();
+  if (!context) return;
+
+  createTone(context, 240, 0.12, 0.04, 0);
+  setTimeout(() => createTone(context, 180, 0.15, 0.04, 0.08), 80);
+}
+
+export function playCallAcceptedTone() {
+  const context = ensureAudioContext();
+  if (!context) return;
+
+  createTone(context, 440, 0.12, 0.03, 0);
+  setTimeout(() => createTone(context, 560, 0.12, 0.03, 0.09), 80);
+}
+

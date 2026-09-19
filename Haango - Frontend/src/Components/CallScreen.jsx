@@ -1,207 +1,171 @@
-import { useEffect, useRef, useState } from 'react';
-import { Camera, CameraOff, Mic, MicOff, PhoneOff, Volume2, VolumeX } from 'lucide-react';
-import { apiRequest } from '../lib/api';
-import { startCallTone } from '../lib/callTone';
+import {
+  Check,
+  Mic,
+  MicOff,
+  Phone,
+  PhoneOff,
+  Sparkles,
+  Volume2,
+  VolumeX,
+  X,
+} from 'lucide-react';
 
-export default function CallScreen({ bookingId, personName, callId, mode, role, accepted: acceptedProp = false, expiresAt, ringbackStop, onClose }) {
-  const localVideo = useRef(null);
-  const remoteVideo = useRef(null);
-  const remoteAudio = useRef(null);
-  const peerRef = useRef(null);
-  const mediaRef = useRef(null);
-  const eventSourceRef = useRef(null);
-  const candidateQueue = useRef([]);
-  const startedMedia = useRef(false);
-  const ringbackStopRef = useRef(() => {});
-  const unansweredTimeoutRef = useRef(null);
-  const connectedRef = useRef(false);
-  const [connected, setConnected] = useState(false);
-  const [accepted, setAccepted] = useState(acceptedProp);
-  const [muted, setMuted] = useState(false);
-  const [cameraOn, setCameraOn] = useState(mode === 'VIDEO');
-  const [speakerOn, setSpeakerOn] = useState(true);
-  const [error, setError] = useState('');
+function formatCallTime(seconds = 0) {
+  const mins = Math.floor(seconds / 60);
+  const secs = String(seconds % 60).padStart(2, '0');
+  return `${mins}:${secs}`;
+}
 
-  const sendSignal = async (type, payload = {}) => {
-    await apiRequest(`/bookings/${bookingId}/call-signal`, {
-      method: 'POST',
-      body: JSON.stringify({ type, callId, mode, payload }),
-    });
-  };
+export default function CallScreen({
+  visible,
+  peer,
+  callState,
+  callType,
+  isMuted,
+  isSpeakerOn,
+  callDuration,
+  onAccept,
+  onReject,
+  onEnd,
+  onToggleMute,
+  onToggleSpeaker,
+}) {
+  if (!visible || !peer) return null;
 
-  const createPeer = () => {
-    if (peerRef.current) return peerRef.current;
-    const peer = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-    peer.onicecandidate = (event) => {
-      if (event.candidate) sendSignal('ICE', event.candidate.toJSON()).catch(() => {});
-    };
-    peer.ontrack = (event) => {
-      const element = mode === 'VIDEO' ? remoteVideo.current : remoteAudio.current;
-      if (!element) return;
-      element.srcObject = event.streams[0];
-      element.muted = false;
-      element.volume = 1;
-      element.play().catch(() => setError('Click the speaker button once to enable call audio.'));
-      markConnected();
-    };
-    peer.onconnectionstatechange = () => {
-      const isStable = ['connected', 'completed'].includes(peer.connectionState);
-      if (isStable) markConnected();
-      if (peer.connectionState === 'failed') setError('Call connection failed. Check the network and try again.');
-    };
-    peerRef.current = peer;
-    return peer;
-  };
+  const isIncoming = callType === 'incoming';
+  const statusText = callState === 'dialing'
+    ? 'Calling...'
+    : callState === 'ringing'
+      ? 'Incoming call'
+      : callState === 'connected'
+        ? 'Connected'
+        : callState === 'missed'
+          ? 'Missed call'
+          : callState === 'rejected'
+            ? 'Call rejected'
+            : 'Call ended';
 
-  const startMedia = async (createOffer) => {
-    if (startedMedia.current) return;
-    startedMedia.current = true;
-    const media = await navigator.mediaDevices.getUserMedia({ audio: true, video: mode === 'VIDEO' });
-    mediaRef.current = media;
-    if (localVideo.current) localVideo.current.srcObject = media;
-    const peer = createPeer();
-    media.getTracks().forEach((track) => peer.addTrack(track, media));
-    if (createOffer) {
-      const offer = await peer.createOffer();
-      await peer.setLocalDescription(offer);
-      await sendSignal('OFFER', offer);
-    }
-  };
-
-  const flushCandidates = async () => {
-    const peer = peerRef.current;
-    while (peer && candidateQueue.current.length) await peer.addIceCandidate(candidateQueue.current.shift());
-  };
-
-  const markConnected = () => {
-    if (connectedRef.current) return;
-    connectedRef.current = true;
-    setAccepted(true);
-    setConnected(true);
-    ringbackStopRef.current();
-    if (unansweredTimeoutRef.current) window.clearTimeout(unansweredTimeoutRef.current);
-  };
-
-  useEffect(() => {
-    if (acceptedProp) {
-      setAccepted(true);
-    }
-  }, [acceptedProp]);
-
-  useEffect(() => {
-    let mounted = true;
-    unansweredTimeoutRef.current = role === 'CALLER' && expiresAt
-      ? window.setTimeout(() => {
-        sendSignal('END').catch(() => {});
-        setError('No answer. Call ended.');
-        window.setTimeout(onClose, 700);
-      }, Math.max(0, expiresAt - Date.now()))
-      : null;
-    const stopRingback = role === 'CALLER' ? (ringbackStop || startCallTone('ringback')) : () => {};
-    ringbackStopRef.current = stopRingback;
-    const connect = async () => {
-      try {
-        const token = localStorage.getItem('haango_access_token');
-        const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5005/api';
-        const stream = new EventSource(`${apiBase}/bookings/${bookingId}/call-signals/stream?access_token=${encodeURIComponent(token || '')}`);
-        eventSourceRef.current = stream;
-        const mediaReady = role === 'CALLEE' ? startMedia(false) : Promise.resolve();
-        stream.onmessage = async (event) => {
-          if (!mounted) return;
-          try {
-            const signal = JSON.parse(event.data);
-            if (signal.callId !== callId) return;
-            if (signal.type === 'ACCEPT' && role === 'CALLER') {
-              setAccepted(true);
-              if (unansweredTimeoutRef.current) window.clearTimeout(unansweredTimeoutRef.current);
-              ringbackStopRef.current();
-              await startMedia(true);
-            }
-            if (signal.type === 'ACCEPT' && role === 'CALLEE') {
-              setAccepted(true);
-              if (unansweredTimeoutRef.current) window.clearTimeout(unansweredTimeoutRef.current);
-              ringbackStopRef.current();
-            }
-            if (signal.type === 'REJECT' || signal.type === 'END') {
-              ringbackStopRef.current();
-              setError(signal.type === 'REJECT' ? 'Call rejected.' : 'Call ended.');
-              window.setTimeout(onClose, 700);
-            }
-            if (signal.type === 'OFFER') {
-              await mediaReady;
-              const peer = createPeer();
-              await peer.setRemoteDescription(signal.payload);
-              await flushCandidates();
-              const answer = await peer.createAnswer();
-              await peer.setLocalDescription(answer);
-              await sendSignal('ANSWER', answer);
-              if (peer.connectionState === 'connected') markConnected();
-            }
-            if (signal.type === 'ANSWER') {
-              await peerRef.current?.setRemoteDescription(signal.payload);
-              await flushCandidates();
-              if (peerRef.current?.connectionState === 'connected') markConnected();
-            }
-            if (signal.type === 'ICE') {
-              if (peerRef.current?.remoteDescription) await peerRef.current.addIceCandidate(signal.payload);
-              else candidateQueue.current.push(signal.payload);
-            }
-          } catch (_) {
-            // Ignore keep-alive and non-signal event data.
-          }
-        };
-        stream.onerror = () => { if (mounted) setError('Call signaling connection lost.'); };
-        await mediaReady;
-      } catch (callError) {
-        if (mounted) setError(callError.message || 'Camera and microphone access is required.');
-      }
-    };
-    connect();
-    return () => {
-      mounted = false;
-      if (unansweredTimeoutRef.current) window.clearTimeout(unansweredTimeoutRef.current);
-      stopRingback();
-      eventSourceRef.current?.close();
-      mediaRef.current?.getTracks().forEach((track) => track.stop());
-      peerRef.current?.close();
-      sendSignal('END').catch(() => {});
-    };
-  }, [bookingId, callId, mode, role, expiresAt]);
-
-  const endCall = async () => {
-    await sendSignal('END').catch(() => {});
-    onClose();
-  };
-  const toggleMute = () => {
-    const track = mediaRef.current?.getAudioTracks()[0];
-    if (!track) return;
-    track.enabled = !track.enabled;
-    setMuted(!track.enabled);
-  };
-  const toggleCamera = () => {
-    const track = mediaRef.current?.getVideoTracks()[0];
-    if (!track) return;
-    track.enabled = !track.enabled;
-    setCameraOn(track.enabled);
-  };
-  const toggleSpeaker = () => {
-    const element = remoteAudio.current || remoteVideo.current;
-    if (!element) return;
-    const nextSpeakerState = !speakerOn;
-    element.muted = !nextSpeakerState;
-    element.volume = nextSpeakerState ? 1 : 0;
-    element.play().catch(() => {});
-    setSpeakerOn(nextSpeakerState);
-  };
+  const isConnected = callState === 'connected';
 
   return (
-    <div className="fixed inset-0 z-100 flex flex-col h-96 w-96 bg-[#101114] text-white">
-      <div className="flex items-center justify-between px-5 py-4"><div><p className="text-xs uppercase tracking-[0.2em] text-white/50">Haango {mode === 'VIDEO' ? 'video' : 'voice'} call</p><h2 className="mt-1 text-lg font-bold">{personName}</h2></div><span className="text-xs text-white/60">{connected ? 'Connected' : accepted ? 'Accepted, connecting...' : role === 'CALLER' ? 'Calling...' : 'Connecting...'}</span></div>
-      <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-[#191b20] p-4" onClick={() => { const element = remoteAudio.current || remoteVideo.current; element?.play().catch(() => {}); }}>
-        {mode === 'VIDEO' ? <><video ref={remoteVideo} autoPlay playsInline className="h-full max-h-[72vh] w-full rounded-3xl object-cover" /><video ref={localVideo} autoPlay muted playsInline className="absolute bottom-6 right-6 h-32 w-24 rounded-2xl border border-white/20 bg-black object-cover shadow-2xl" /></> : <><audio ref={remoteAudio} autoPlay /><div className="text-center"><div className="mx-auto flex h-28 w-28 items-center justify-center rounded-full bg-white/10 text-4xl font-bold">{personName?.[0]?.toUpperCase() || '?'}</div><p className="mt-4 text-lg font-semibold">Voice call</p></div></>}
-        {error && <p className="absolute left-5 right-5 top-5 rounded-xl bg-red-500/90 p-3 text-sm">{error}</p>}
+    <div className="fixed inset-0 z-[60] bg-[#160f1c]/75 backdrop-blur-md">
+      <div className="flex min-h-full items-center justify-center p-4">
+        <div className="w-full max-w-md overflow-hidden rounded-[32px] border border-white/10 bg-[radial-gradient(circle_at_top,_rgba(255,131,92,0.35),_rgba(37,20,23,0.92)_35%,_rgba(15,10,16,1)_100%)] text-white shadow-[0_30px_80px_rgba(0,0,0,0.45)]">
+          <div className="flex items-center justify-between px-5 pt-5">
+            <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/80">
+              {callState === 'connected' ? 'Live call' : 'Haango call'}
+            </span>
+            <button
+              type="button"
+              onClick={onEnd}
+              className="rounded-full border border-white/10 bg-white/5 p-2 text-white/80 transition hover:bg-white/10"
+              aria-label="Close call"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="px-6 pb-6 pt-8 text-center">
+            <div className="mx-auto flex h-28 w-28 items-center justify-center rounded-full border border-white/15 bg-white/10 shadow-[0_0_35px_rgba(255,125,89,0.32)]">
+              <div className="flex h-24 w-24 items-center justify-center rounded-full bg-[linear-gradient(135deg,_#ffb18c,_#ff6b4a)] text-3xl font-black text-white shadow-lg">
+                {peer.name?.charAt(0)?.toUpperCase() || 'H'}
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center justify-center gap-2">
+              <Sparkles size={16} className="text-[#ffb197]" />
+              <p className="text-xs font-medium uppercase tracking-[0.22em] text-white/70">Voice conversation</p>
+            </div>
+
+            <h2 className="mt-4 text-3xl font-black tracking-tight">{peer.name || 'Companion'}</h2>
+            <p className="mt-2 text-sm text-white/70">{statusText}</p>
+
+            {isConnected && (
+              <div className="mt-4 text-lg font-semibold text-[#ffcfbd]">
+                {formatCallTime(callDuration || 0)}
+              </div>
+            )}
+
+            <div className="mt-8 grid grid-cols-3 gap-3">
+              <button
+                type="button"
+                onClick={onToggleMute}
+                className={`flex flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-sm font-medium transition ${
+                  isMuted
+                    ? 'border-rose-400/40 bg-rose-500/20 text-rose-100'
+                    : 'border-white/10 bg-white/5 text-white/80 hover:bg-white/10'
+                }`}
+              >
+                {isMuted ? <MicOff size={20} /> : <Mic size={20} />}
+                {isMuted ? 'Unmute' : 'Mute'}
+              </button>
+
+              <button
+                type="button"
+                onClick={onToggleSpeaker}
+                className={`flex flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-sm font-medium transition ${
+                  isSpeakerOn
+                    ? 'border-[#ffb18c]/40 bg-[#ff8a5b]/20 text-[#fff1eb]'
+                    : 'border-white/10 bg-white/5 text-white/80 hover:bg-white/10'
+                }`}
+              >
+                {isSpeakerOn ? <Volume2 size={20} /> : <VolumeX size={20} />}
+                {isSpeakerOn ? 'Speaker' : 'Earpiece'}
+              </button>
+
+              <button
+                type="button"
+                onClick={onEnd}
+                className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-rose-400/40 bg-rose-500/20 px-3 py-3 text-sm font-medium text-rose-100 transition hover:bg-rose-500/25"
+              >
+                <PhoneOff size={20} />
+                End
+              </button>
+            </div>
+
+            {(isIncoming || callState === 'dialing') && (
+              <div className="mt-8 grid grid-cols-2 gap-3">
+                {isIncoming && (
+                  <button
+                    type="button"
+                    onClick={onAccept}
+                    className="flex items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,_#2dd4bf,_#0ea5a4)] px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-900/40 transition hover:brightness-110"
+                  >
+                    <Check size={18} />
+                    Accept
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={onReject}
+                  className={`flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold text-white ${
+                    isIncoming
+                      ? 'bg-[linear-gradient(135deg,_#f97316,_#ef4444)] shadow-lg shadow-rose-900/30 hover:brightness-110'
+                      : 'border border-white/10 bg-white/5 hover:bg-white/10'
+                  }`}
+                >
+                  {isIncoming ? <PhoneOff size={18} /> : <X size={18} />}
+                  {isIncoming ? 'Reject' : 'Cancel'}
+                </button>
+              </div>
+            )}
+
+            {!isConnected && !isIncoming && callState !== 'dialing' && (
+              <div className="mt-8">
+                <button
+                  type="button"
+                  onClick={onEnd}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white/5 px-4 py-3 text-sm font-semibold text-white/80"
+                >
+                  <Phone size={16} />
+                  Back to chat
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
-      <div className="flex items-center justify-center gap-4 px-5 py-6"><button onClick={toggleMute} title={muted ? 'Unmute microphone' : 'Mute microphone'} aria-label={muted ? 'Unmute microphone' : 'Mute microphone'} className="rounded-full bg-white/10 p-4 hover:bg-white/20">{muted ? <MicOff size={21} /> : <Mic size={21} />}</button>{mode === 'VIDEO' && <button onClick={toggleCamera} title={cameraOn ? 'Turn camera off' : 'Turn camera on'} aria-label={cameraOn ? 'Turn camera off' : 'Turn camera on'} className="rounded-full bg-white/10 p-4 hover:bg-white/20">{cameraOn ? <Camera size={21} /> : <CameraOff size={21} />}</button>}<button onClick={endCall} title="End call" aria-label="End call" className="rounded-full bg-red-500 p-4 hover:bg-red-600"><PhoneOff size={21} /></button><button onClick={toggleSpeaker} title={speakerOn ? 'Turn speaker off' : 'Turn speaker on'} aria-label={speakerOn ? 'Turn speaker off' : 'Turn speaker on'} className="rounded-full bg-white/10 p-4 hover:bg-white/20">{speakerOn ? <Volume2 size={21} /> : <VolumeX size={21} />}</button></div>
     </div>
   );
 }
