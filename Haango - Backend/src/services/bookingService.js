@@ -19,8 +19,6 @@ import { findAvailableCoupon } from './couponService.js';
 const LOCATION_RETENTION_MS = 24 * 60 * 60 * 1000;
 const LOCATION_STALE_MS = 2 * 60 * 1000;
 const INDIA_OFFSET_MINUTES = 330;
-const callSessions = new Map();
-const callSubscribers = new Map();
 
 function getIndiaCalendarDate(value) {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -239,6 +237,58 @@ export function isCallUnlocked(booking) {
   const start = meetingStart(booking);
   return Date.now() >= start.getTime() - 2 * 60 * 60 * 1000;
 }
+
+export function isCallAvailable(booking) {
+  if (['COMPLETED', 'CANCELLED', 'REJECTED'].includes(booking.bookingStatus)) return false;
+  const start = meetingStart(booking).getTime();
+  const end = getMeetingEnd(booking);
+  return Date.now() >= start - 2 * 60 * 60 * 1000 && Date.now() < end;
+}
+
+async function assertCallParticipant(bookingId, userId, requireAvailable = true) {
+  const booking = await Booking.findById(bookingId).select('customerId buddyId paymentStatus bookingStatus date startTime duration');
+  if (!booking) throw notFound('Booking not found');
+  assertParticipant(booking, userId);
+  if (booking.paymentStatus !== 'PAID' || (requireAvailable && !isCallAvailable(booking))) throw forbidden('Calls unlock two hours before the meeting and end with the meeting');
+  return booking;
+}
+
+export async function getCallStatus(bookingId, userId) {
+  const booking = await Booking.findById(bookingId).select('customerId buddyId paymentStatus bookingStatus date startTime duration');
+  if (!booking) throw notFound('Booking not found');
+  assertParticipant(booking, userId);
+  const start = meetingStart(booking).getTime();
+  return { available: booking.paymentStatus === 'PAID' && isCallAvailable(booking), unlocksAt: new Date(start - 2 * 60 * 60 * 1000), endsAt: new Date(getMeetingEnd(booking)) };
+}
+
+export async function sendCallSignal(bookingId, userId, data) {
+  await assertCallParticipant(bookingId, userId);
+  if (!['REQUEST', 'ACCEPT', 'REJECT', 'END', 'OFFER', 'ANSWER', 'ICE'].includes(data.type)) throw badRequest('Invalid call signal', 'INVALID_CALL_SIGNAL');
+  const signal = await CallSignal.create({ bookingId, senderId: userId, type: data.type, callId: data.callId, mode: data.mode || 'AUDIO', payload: data.payload || {} });
+  return signal;
+}
+
+export async function getCallSignals(bookingId, userId, after = 0) {
+  await assertCallParticipant(bookingId, userId);
+  return CallSignal.find({ bookingId, senderId: { $ne: userId }, createdAt: { $gte: new Date(Date.now() - 10 * 60 * 1000) }, ...(after ? { createdAt: { $gt: new Date(after) } } : {}) }).sort({ createdAt: 1 });
+}
+
+export async function streamCallSignals(bookingId, userId, response) {
+  await assertCallParticipant(bookingId, userId, false);
+  response.write(': connected\n\n');
+  let after = new Date(Date.now() - 60 * 1000);
+  const timer = setInterval(async () => {
+    try {
+      const signals = await CallSignal.find({ bookingId, senderId: { $ne: userId }, createdAt: { $gt: after } }).sort({ createdAt: 1 }).lean();
+      signals.forEach((signal) => {
+        after = signal.createdAt;
+        response.write(`data: ${JSON.stringify(signal)}\n\n`);
+      });
+    } catch (_) { /* The stream remains open and retries on the next tick. */ }
+  }, 500);
+  const heartbeat = setInterval(() => response.write(': keep-alive\n\n'), 15000);
+  response.on('close', () => { clearInterval(timer); clearInterval(heartbeat); });
+}
 function isLocationUnlocked(booking) {
   if (['COMPLETED', 'CANCELLED', 'REJECTED'].includes(booking.bookingStatus)) return false;
   if (booking.bookingStatus === 'ONGOING') return true;
@@ -340,113 +390,6 @@ export async function reviewCancellation(requestId, adminId, status, adminNotes 
   await recordAdminAction({ actor: await User.findById(adminId), request: requestContext, action: 'CANCELLATION_DECISION', targetType: 'CancellationRequest', targetId: request._id, metadata: { status, bookingId: request.bookingId._id } });
   return request;
 }
-export async function getCallRoom(bookingId, userId) {
-  const booking = await Booking.findById(bookingId);
-  if (!booking) throw notFound('Booking not found');
-  assertParticipant(booking, userId);
-  if (!isCallUnlocked(booking)) throw forbidden('Internet call unlocks within two hours of the meeting');
-  if (!booking.meeting.callRoomId) { booking.meeting.callRoomId = crypto.randomBytes(24).toString('hex'); await booking.save(); }
-  return { roomId: booking.meeting.callRoomId, roomUrl: `${env.callProviderUrl}/${booking.meeting.callRoomId}` };
-}
-
-async function getCallBooking(bookingId, userId, requireUnlocked = true) {
-  const booking = await Booking.findById(bookingId).select('customerId buddyId paymentStatus bookingStatus date startTime duration');
-  if (!booking) throw notFound('Booking not found');
-  assertParticipant(booking, userId);
-  if (booking.paymentStatus !== 'PAID' || ['COMPLETED', 'CANCELLED', 'REJECTED'].includes(booking.bookingStatus)) {
-    throw forbidden('Calling is unavailable for this booking');
-  }
-  if (requireUnlocked && !isCallUnlocked(booking)) throw forbidden('Calls unlock within two hours of the meeting');
-  return booking;
-}
-
-export async function joinCall(bookingId, userId) {
-  await getCallBooking(bookingId, userId);
-  const key = String(bookingId);
-  let session = callSessions.get(key);
-  if (!session) {
-    session = { participants: new Set(), messages: [], sequence: 0, lastActivity: Date.now() };
-    callSessions.set(key, session);
-  }
-  const userKey = String(userId);
-  const initiator = session.participants.size === 0;
-  session.participants.add(userKey);
-  session.lastActivity = Date.now();
-  return { initiator, participantCount: session.participants.size };
-}
-
-export async function sendCallSignal(bookingId, userId, type, payload) {
-  await getCallBooking(bookingId, userId);
-  const session = callSessions.get(String(bookingId));
-  if (!session || !session.participants.has(String(userId))) throw forbidden('Join the call before sending a signal');
-  const signal = await CallSignal.create({ bookingId, senderId: userId, type, payload });
-  session.messages.push({ sequence: ++session.sequence, senderId: String(userId), type, payload, createdAt: signal.createdAt.getTime() });
-  session.lastActivity = Date.now();
-  const subscribers = callSubscribers.get(String(bookingId)) || new Set();
-  subscribers.forEach((subscriber) => {
-    if (subscriber.userId !== String(userId)) subscriber.send(session.messages.at(-1));
-  });
-  return { sent: true, sequence: session.sequence };
-}
-
-export async function subscribeCallSignals(bookingId, userId, response) {
-  await getCallBooking(bookingId, userId, false);
-  const key = String(bookingId);
-  const session = callSessions.get(key);
-  const subscriber = { userId: String(userId), response, send: (message) => response.write(`data: ${JSON.stringify(message)}\n\n`) };
-  if (!callSubscribers.has(key)) callSubscribers.set(key, new Set());
-  callSubscribers.get(key).add(subscriber);
-  const cleanup = () => {
-    callSubscribers.get(key)?.delete(subscriber);
-    if (!callSubscribers.get(key)?.size) callSubscribers.delete(key);
-  };
-  response.on('close', cleanup);
-  subscriber.heartbeat = setInterval(() => response.write(': keep-alive\n\n'), 15000);
-  response.on('close', () => clearInterval(subscriber.heartbeat));
-  response.write(': connected\n\n');
-  const activeRequest = await CallSignal.findOne({
-    bookingId,
-    type: 'CALL_REQUEST',
-    senderId: { $ne: userId },
-    createdAt: { $gte: new Date(Date.now() - 60 * 1000) },
-  }).sort({ createdAt: -1 }).lean();
-  if (activeRequest) subscriber.send({
-    sequence: 0,
-    senderId: String(activeRequest.senderId),
-    type: activeRequest.type,
-    payload: activeRequest.payload,
-    createdAt: activeRequest.createdAt.getTime(),
-  });
-}
-
-export async function pollCallSignals(bookingId, userId, after = 0) {
-  await getCallBooking(bookingId, userId, false);
-  const session = callSessions.get(String(bookingId));
-  if (session) session.lastActivity = Date.now();
-  const signals = await CallSignal.find({
-    bookingId,
-    senderId: { $ne: userId },
-    createdAt: { $gte: new Date(Date.now() - 60 * 1000) },
-  }).sort({ createdAt: 1 }).lean();
-  return signals.map((signal) => ({
-    sequence: signal.createdAt.getTime(),
-    senderId: String(signal.senderId),
-    type: signal.type,
-    payload: signal.payload,
-    createdAt: signal.createdAt.getTime(),
-  }));
-}
-
-export async function leaveCall(bookingId, userId) {
-  const session = callSessions.get(String(bookingId));
-  if (session) {
-    session.participants.delete(String(userId));
-    session.messages.push({ sequence: ++session.sequence, senderId: String(userId), type: 'HANGUP', payload: {} });
-    if (!session.participants.size) callSessions.delete(String(bookingId));
-  }
-  return { left: true };
-}
-
 export async function updateParticipantLocation(bookingId, userId, location, request) {
   const booking = await Booking.findById(bookingId);
   if (!booking) throw notFound('Booking not found');

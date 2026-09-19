@@ -46,7 +46,6 @@ const bookingSchema = new mongoose.Schema(
       endVerifiedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
       startedAt: { type: Date, default: null },
       endedAt: { type: Date, default: null },
-      callRoomId: { type: String, default: '' },
       locations: [{
         userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
         latitude: { type: Number, min: -90, max: 90 },

@@ -34,7 +34,6 @@ export const env = {
   cookieSameSite: process.env.COOKIE_SAME_SITE || 'lax',
 
   clientUrl,
-  callProviderUrl: process.env.CALL_PROVIDER_URL || 'https://meet.jit.si',
   corsOrigins,
 
   smtpHost: process.env.SMTP_HOST || '',
