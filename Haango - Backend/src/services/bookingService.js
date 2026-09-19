@@ -349,7 +349,7 @@ export async function getCallRoom(bookingId, userId) {
 }
 
 async function getCallBooking(bookingId, userId, requireUnlocked = true) {
-  const booking = await Booking.findById(bookingId).select('customerId buddyId paymentStatus bookingStatus');
+  const booking = await Booking.findById(bookingId).select('customerId buddyId paymentStatus bookingStatus date startTime duration');
   if (!booking) throw notFound('Booking not found');
   assertParticipant(booking, userId);
   if (booking.paymentStatus !== 'PAID' || ['COMPLETED', 'CANCELLED', 'REJECTED'].includes(booking.bookingStatus)) {
