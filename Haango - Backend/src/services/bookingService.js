@@ -240,16 +240,14 @@ export function isCallUnlocked(booking) {
 
 export function isCallAvailable(booking) {
   if (['COMPLETED', 'CANCELLED', 'REJECTED'].includes(booking.bookingStatus)) return false;
-  const start = meetingStart(booking).getTime();
-  const end = getMeetingEnd(booking);
-  return Date.now() >= start - 2 * 60 * 60 * 1000 && Date.now() < end;
+  return Date.now() < getMeetingEnd(booking);
 }
 
 async function assertCallParticipant(bookingId, userId, requireAvailable = true) {
   const booking = await Booking.findById(bookingId).select('customerId buddyId paymentStatus bookingStatus date startTime duration');
   if (!booking) throw notFound('Booking not found');
   assertParticipant(booking, userId);
-  if (booking.paymentStatus !== 'PAID' || (requireAvailable && !isCallAvailable(booking))) throw forbidden('Calls unlock two hours before the meeting and end with the meeting');
+  if (booking.paymentStatus !== 'PAID' || (requireAvailable && !isCallAvailable(booking))) throw forbidden('Calls are unavailable after the meeting ends');
   return booking;
 }
 
@@ -257,8 +255,8 @@ export async function getCallStatus(bookingId, userId) {
   const booking = await Booking.findById(bookingId).select('customerId buddyId paymentStatus bookingStatus date startTime duration');
   if (!booking) throw notFound('Booking not found');
   assertParticipant(booking, userId);
-  const start = meetingStart(booking).getTime();
-  return { available: booking.paymentStatus === 'PAID' && isCallAvailable(booking), unlocksAt: new Date(start - 2 * 60 * 60 * 1000), endsAt: new Date(getMeetingEnd(booking)) };
+  const end = getMeetingEnd(booking);
+  return { available: booking.paymentStatus === 'PAID' && Date.now() < end, endsAt: new Date(end) };
 }
 
 export async function sendCallSignal(bookingId, userId, data) {
