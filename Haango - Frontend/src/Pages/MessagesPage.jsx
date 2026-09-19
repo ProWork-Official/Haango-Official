@@ -185,6 +185,14 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
     const token = localStorage.getItem('haango_access_token');
     const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5005/api';
     const stream = new EventSource(`${apiBase}/bookings/${active.bookingId}/call-signal/stream?access_token=${encodeURIComponent(token || '')}`);
+    const loadPendingRequest = async () => {
+      try {
+        const signals = await apiRequest(`/bookings/${active.bookingId}/call-signal?after=0`);
+        const request = signals.find((signal) => signal.type === 'CALL_REQUEST');
+        if (request) setIncomingCall({ ...request.payload, bookingId: active.bookingId });
+      } catch (_) { /* The stream remains the primary delivery path. */ }
+    };
+    stream.onopen = loadPendingRequest;
     stream.onmessage = (event) => {
       const signal = JSON.parse(event.data);
       if (signal.type === 'CALL_REQUEST') setIncomingCall({ ...signal.payload, bookingId: active.bookingId });
