@@ -96,7 +96,6 @@ export async function getBuddies(filters, viewer = null) {
     verificationStatus: 'VERIFIED',
     isAvailable: true,
     showOnFindCompanions: true,
-    profileCompletion: 100,
     hourlyRate: { $gte: minPrice, $lte: maxPrice },
     rating: { $gte: rating },
   };
@@ -190,7 +189,7 @@ export async function createBuddyProfile(userId, data) {
     showOnFindCompanions: data.showOnFindCompanions !== false,
     girlsOnly: Boolean(data.girlsOnly),
     available: data.available !== false,
-    verified: Boolean(data.verified),
+    verified: true,
   });
 
   if (user) {
@@ -198,10 +197,8 @@ export async function createBuddyProfile(userId, data) {
   }
 
   profile.profileCompletion = computeBuddyProfileCompletion(profile);
-  profile.verificationStatus = profile.profileCompletion >= 100 ? 'VERIFIED' : 'PENDING';
-  if (profile.profileCompletion >= 100) {
-    profile.showOnFindCompanions = true;
-  }
+  profile.verificationStatus = 'VERIFIED';
+  profile.showOnFindCompanions = true;
   await profile.save();
   await ensureEarlyStarterBonus(userId);
   return profile;

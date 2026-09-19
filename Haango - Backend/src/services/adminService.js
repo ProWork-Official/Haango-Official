@@ -115,7 +115,7 @@ export async function updateBuddy(buddyProfileId, updates, actor, request) {
 export async function verifyBuddy(buddyProfileId, actor, request) {
   const buddy = await BuddyProfile.findByIdAndUpdate(
     buddyProfileId,
-    { verificationStatus: 'VERIFIED' },
+    { verificationStatus: 'VERIFIED', verified: true },
     { new: true }
   );
   if (!buddy) throw notFound('Buddy profile not found');

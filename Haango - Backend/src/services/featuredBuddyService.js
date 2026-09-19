@@ -11,7 +11,6 @@ const eligibleQuery = {
   isAvailable: true,
   showOnFindCompanions: true,
   girlsOnly: false,
-  profileCompletion: 100,
 };
 
 async function getConfig() {
