@@ -76,12 +76,17 @@ export default function CallScreen({ bookingId, personName, callId, mode, role, 
   const markConnected = () => {
     if (connectedRef.current) return;
     connectedRef.current = true;
+    setAccepted(true);
     setConnected(true);
     ringbackStopRef.current();
+    if (unansweredTimeoutRef.current) window.clearTimeout(unansweredTimeoutRef.current);
   };
 
   useEffect(() => {
-    if (acceptedProp) setAccepted(true);
+    if (acceptedProp) {
+      setAccepted(true);
+      markConnected();
+    }
   }, [acceptedProp]);
 
   useEffect(() => {
@@ -109,12 +114,14 @@ export default function CallScreen({ bookingId, personName, callId, mode, role, 
             if (signal.callId !== callId) return;
             if (signal.type === 'ACCEPT' && role === 'CALLER') {
               setAccepted(true);
+              markConnected();
               if (unansweredTimeoutRef.current) window.clearTimeout(unansweredTimeoutRef.current);
               ringbackStopRef.current();
               await startMedia(true);
             }
             if (signal.type === 'ACCEPT' && role === 'CALLEE') {
               setAccepted(true);
+              markConnected();
               if (unansweredTimeoutRef.current) window.clearTimeout(unansweredTimeoutRef.current);
               ringbackStopRef.current();
             }
