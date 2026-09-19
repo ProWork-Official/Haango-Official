@@ -71,8 +71,11 @@ export default function CallScreen({ bookingId, personName, callId, mode, role, 
   };
 
   useEffect(() => {
-    let mounted = true;
     if (acceptedProp) setAccepted(true);
+  }, [acceptedProp]);
+
+  useEffect(() => {
+    let mounted = true;
     unansweredTimeoutRef.current = role === 'CALLER' && expiresAt
       ? window.setTimeout(() => {
         sendSignal('END').catch(() => {});
@@ -84,11 +87,11 @@ export default function CallScreen({ bookingId, personName, callId, mode, role, 
     ringbackStopRef.current = stopRingback;
     const connect = async () => {
       try {
-        if (role === 'CALLEE') await startMedia(false);
         const token = localStorage.getItem('haango_access_token');
         const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5005/api';
         const stream = new EventSource(`${apiBase}/bookings/${bookingId}/call-signals/stream?access_token=${encodeURIComponent(token || '')}`);
         eventSourceRef.current = stream;
+        const mediaReady = role === 'CALLEE' ? startMedia(false) : Promise.resolve();
         stream.onmessage = async (event) => {
           if (!mounted) return;
           try {
@@ -106,6 +109,7 @@ export default function CallScreen({ bookingId, personName, callId, mode, role, 
               window.setTimeout(onClose, 700);
             }
             if (signal.type === 'OFFER') {
+              await mediaReady;
               const peer = createPeer();
               await peer.setRemoteDescription(signal.payload);
               await flushCandidates();
@@ -126,6 +130,7 @@ export default function CallScreen({ bookingId, personName, callId, mode, role, 
           }
         };
         stream.onerror = () => { if (mounted) setError('Call signaling connection lost.'); };
+        await mediaReady;
       } catch (callError) {
         if (mounted) setError(callError.message || 'Camera and microphone access is required.');
       }
@@ -140,7 +145,7 @@ export default function CallScreen({ bookingId, personName, callId, mode, role, 
       peerRef.current?.close();
       sendSignal('END').catch(() => {});
     };
-  }, [bookingId, callId, mode, role, expiresAt, acceptedProp]);
+  }, [bookingId, callId, mode, role, expiresAt]);
 
   const endCall = async () => {
     await sendSignal('END').catch(() => {});
