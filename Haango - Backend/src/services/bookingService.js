@@ -18,6 +18,51 @@ import { findAvailableCoupon } from './couponService.js';
 const LOCATION_RETENTION_MS = 24 * 60 * 60 * 1000;
 const LOCATION_STALE_MS = 2 * 60 * 1000;
 
+function parseBookingDate(value) {
+  const dateValue = String(value || '');
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateValue);
+  if (!dateMatch) return new Date(NaN);
+
+  const date = new Date(Date.UTC(
+    Number(dateMatch[1]),
+    Number(dateMatch[2]) - 1,
+    Number(dateMatch[3]),
+  ));
+  if (
+    date.getUTCFullYear() !== Number(dateMatch[1])
+    || date.getUTCMonth() !== Number(dateMatch[2]) - 1
+    || date.getUTCDate() !== Number(dateMatch[3])
+  ) return new Date(NaN);
+  return date;
+}
+
+function parseStartTime(value) {
+  const timeValue = String(value || '').trim().toUpperCase();
+  const twelveHourMatch = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/.exec(timeValue);
+  const twentyFourHourMatch = /^(\d{1,2}):(\d{2})$/.exec(timeValue);
+  const match = twelveHourMatch || twentyFourHourMatch;
+  if (!match) return null;
+
+  let hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (minutes > 59 || hours > (twelveHourMatch ? 12 : 23)) return null;
+  if (twelveHourMatch) {
+    if (hours === 12) hours = 0;
+    if (match[3] === 'PM') hours += 12;
+  }
+
+  return { hours, minutes };
+}
+
+function getBookingStart(date, startTime) {
+  const parsedTime = parseStartTime(startTime);
+  if (!parsedTime) return new Date(NaN);
+
+  const bookingStart = new Date(date);
+  bookingStart.setUTCHours(parsedTime.hours, parsedTime.minutes, 0, 0);
+  return bookingStart;
+}
+
 async function logLocationAccess(bookingId, userId, action, request = {}) {
   await LocationAccessLog.create({
     bookingId,
@@ -65,9 +110,12 @@ export async function createBooking(customerId, data) {
     throw badRequest(`Duration must be ${env.minBookingDuration}-${env.maxBookingDuration} hours`, 'INVALID_DURATION');
   }
 
-  const bookingDate = new Date(data.date);
-  const now = new Date();
-  if (bookingDate < now) throw badRequest('Cannot book in the past', 'PAST_DATE');
+  const bookingDate = parseBookingDate(data.date);
+  const bookingStart = getBookingStart(bookingDate, data.startTime);
+  if (Number.isNaN(bookingDate.getTime()) || Number.isNaN(bookingStart.getTime())) {
+    throw badRequest('Valid booking date and time required', 'INVALID_DATE_TIME');
+  }
+  if (bookingStart < new Date()) throw badRequest('Cannot book in the past', 'PAST_DATE');
 
   const conflicting = await Booking.findOne({
     buddyId: buddy.userId,
@@ -163,9 +211,9 @@ export async function cancelBooking(bookingId, userId, userRole) {
 }
 
 function meetingStart(booking) {
-  const [hours, minutes] = String(booking.startTime).split(':').map(Number);
+  const parsedTime = parseStartTime(booking.startTime) || { hours: 0, minutes: 0 };
   const date = new Date(booking.date);
-  date.setHours(hours || 0, minutes || 0, 0, 0);
+  date.setUTCHours(parsedTime.hours, parsedTime.minutes, 0, 0);
   return date;
 }
 export function isCallUnlocked(booking) {

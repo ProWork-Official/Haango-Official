@@ -24,6 +24,22 @@ function getRazorpayClient() {
   return new Razorpay({ key_id: env.razorpayKeyId, key_secret: env.razorpayKeySecret });
 }
 
+function parseStartTime(value) {
+  const timeValue = String(value || '').trim().toUpperCase();
+  const twelveHourMatch = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/.exec(timeValue);
+  const twentyFourHourMatch = /^(\d{1,2}):(\d{2})$/.exec(timeValue);
+  const match = twelveHourMatch || twentyFourHourMatch;
+  if (!match) return { hours: 0, minutes: 0 };
+
+  let hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (twelveHourMatch) {
+    if (hours === 12) hours = 0;
+    if (match[3] === 'PM') hours += 12;
+  }
+  return { hours, minutes };
+}
+
 export async function createOrder(booking) {
   if (booking.paymentStatus === 'PAID') {
     throw badRequest('Booking has already been paid', 'BOOKING_ALREADY_PAID');
@@ -63,9 +79,9 @@ export async function createExtensionOrder(booking, hours) {
     const razorpay = getRazorpayClient();
     if (booking.paymentStatus !== 'PAID' || booking.bookingStatus !== 'ONGOING') throw badRequest('Only an active paid meeting can be extended', 'INVALID_STATUS');
     if (!Number.isInteger(hours) || hours < 1 || hours > 8) throw badRequest('Extension must be 1 to 8 hours', 'INVALID_DURATION');
-    const [h, m] = String(booking.startTime).split(':').map(Number);
+  const { hours: startHours, minutes: startMinutes } = parseStartTime(booking.startTime);
     const scheduledEnd = new Date(booking.date);
-    scheduledEnd.setHours(h || 0, m || 0, 0, 0);
+  scheduledEnd.setUTCHours(startHours, startMinutes, 0, 0);
     scheduledEnd.setTime(scheduledEnd.getTime() + booking.duration * 60 * 60 * 1000);
     if (Date.now() < scheduledEnd.getTime()) throw badRequest('Extension is available after the original meeting end', 'EXTENSION_TOO_EARLY');
     const amount = Math.round(booking.buddyRate * hours * (1 + env.platformFeePercentage / 100));
