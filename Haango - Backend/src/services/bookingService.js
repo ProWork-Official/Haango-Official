@@ -385,7 +385,7 @@ export async function sendCallSignal(bookingId, userId, type, payload) {
 export async function pollCallSignals(bookingId, userId, after = 0) {
   await getCallBooking(bookingId, userId);
   const session = callSessions.get(String(bookingId));
-  if (!session || !session.participants.has(String(userId))) throw forbidden('Join the call before polling signals');
+  if (!session) return [];
   session.lastActivity = Date.now();
   return session.messages.filter((message) => message.senderId !== String(userId) && message.sequence > Number(after || 0));
 }
