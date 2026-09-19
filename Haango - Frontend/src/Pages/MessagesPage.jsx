@@ -231,7 +231,7 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
 
   const startCall = async (mode) => {
     if (!active || !callStatus?.available) {
-      setError('Calls unlock two hours before the meeting and end when the meeting ends.');
+      setError('The call is no longer available because the meeting has ended.');
       return;
     }
     const callId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
