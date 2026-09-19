@@ -281,8 +281,9 @@ export async function streamCallSignals(bookingId, userId, response) {
   const recentSignals = await CallSignal.find({ bookingId, senderId: { $ne: userId }, createdAt: { $gte: new Date(Date.now() - 60 * 1000) } }).sort({ createdAt: 1 }).lean();
   const latestByCall = new Map();
   recentSignals.forEach((signal) => latestByCall.set(signal.callId, signal));
-  latestByCall.forEach((signal) => {
-    if (signal.type === 'REQUEST') response.write(`data: ${JSON.stringify(signal)}\n\n`);
+  recentSignals.forEach((signal) => {
+    const latest = latestByCall.get(signal.callId);
+    if (!['REJECT', 'END'].includes(latest.type)) response.write(`data: ${JSON.stringify(signal)}\n\n`);
   });
   const timer = setInterval(async () => {
     try {
