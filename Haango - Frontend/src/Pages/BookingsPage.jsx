@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Calendar, Clock, MapPin, MessageCircle, XCircle } from 'lucide-react';
+import { ArrowLeft, Calendar, CheckCircle2, ChevronRight, Clock3, Lock, MapPin, MessageCircle, ShieldCheck, X, XCircle } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import haangoLogo from '../Assets/Icon/S_Blue.png';
 import { useAuth } from '../lib/auth';
@@ -278,70 +278,121 @@ export default function BookingsPage({ onBack, onMessage }) {
   const renderBooking = (booking) => {
     const buddy = booking.buddyProfileId;
     const activity = booking.activityId;
+    const startOtpLocked = currentTime < meetingStartTime(booking) - 60 * 60 * 1000;
+    const locationLocked = !locationUnlocked(booking);
+    const isConfirmed = booking.bookingStatus === 'CONFIRMED' || booking.paymentStatus === 'PAID';
+
     return (
-      <div key={booking._id} className="card p-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <img
-              src={buddy?.profileImages?.[0] || ''}
-              alt={buddy?.displayName || 'Buddy'}
-              className="h-14 w-14 rounded-2xl bg-coral-50 object-cover"
-            />
+      <div key={booking._id} className="rounded-[28px] border border-[#e6ddd4] bg-[#f7f5f2] p-3 shadow-[0_4px_18px_rgba(17,24,39,0.04)] sm:p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="h-16 w-16 overflow-hidden rounded-2xl bg-[#efe6dc] ring-2 ring-white sm:h-18 sm:w-18">
+              <img
+                src={buddy?.profileImages?.[0] || ''}
+                alt={buddy?.displayName || 'Buddy'}
+                className="h-full w-full object-cover"
+              />
+            </div>
+
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-coral-500">{activity?.name || booking.activitySlug}</p>
-              <h3 className="mt-1 font-display text-lg font-bold text-ink-900">{buddy?.displayName || 'Buddy booking'}</h3>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#5a7a9e]">{activity?.name || booking.activitySlug || 'CITY TRAVEL'}</p>
+              <h3 className="mt-1 font-display text-2xl font-black tracking-[-0.04em] text-ink-900 sm:text-[2.2rem]">
+                {buddy?.displayName || 'Buddy booking'}
+              </h3>
+              <div className="mt-2 flex items-center gap-2 text-sm font-semibold text-[#1d9d68]">
+                <CheckCircle2 size={16} className="fill-[#1d9d68] text-white" />
+                <span>{isConfirmed ? 'Confirmed' : booking.bookingStatus}</span>
+              </div>
             </div>
           </div>
-          <span className="rounded-full bg-ink-50 px-3 py-1 text-xs font-semibold text-ink-600">{booking.bookingStatus}</span>
+
+          <div className="flex items-center justify-start sm:justify-end">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#bfe8d6] bg-[#eafaf1] px-3 py-2 text-sm font-semibold text-[#1d9d68]">
+              <CheckCircle2 size={16} className="fill-[#1d9d68] text-white" />
+              <span>Booking Confirmed</span>
+            </div>
+          </div>
         </div>
-        <div className="mt-4 grid gap-3 text-sm text-ink-600 sm:grid-cols-2">
-          <span className="flex items-center gap-2"><Calendar size={16} /> {formatDate(booking.date)}</span>
-          <span className="flex items-center gap-2"><Clock size={16} /> {booking.startTime} · {booking.duration} hrs</span>
-          <span className="flex items-center gap-2"><MapPin size={16} /> {booking.meetingLocation}</span>
-          <span className="font-semibold text-ink-900">₹{Number(booking.totalAmount || 0).toLocaleString('en-IN')} · {booking.paymentStatus}</span>
+
+        <div className="mt-4 grid gap-3 border-t border-[#e9e1d9] pt-4 text-sm text-ink-700 sm:grid-cols-3 sm:items-center">
+          <div className="flex items-center gap-2"><Calendar size={16} className="text-ink-500" /> <span>{formatDate(booking.date)}</span></div>
+          <div className="flex items-center gap-2"><Clock3 size={16} className="text-ink-500" /> <span>{booking.startTime} · {booking.duration} hrs</span></div>
+          <div className="flex items-center justify-between gap-2 sm:justify-end">
+            <div className="flex items-center gap-2"><MapPin size={16} className="text-ink-500" /> <span>{booking.meetingLocation}</span></div>
+            <span className="text-base font-bold text-ink-900">₹{Number(booking.totalAmount || 0).toLocaleString('en-IN')} · <span className="text-[#1d9d68]">{booking.paymentStatus}</span></span>
+          </div>
         </div>
+
+        <div className="mt-4 rounded-2xl border border-[#cfe5f7] bg-[#eaf3fb] px-3 py-3 text-sm text-[#426d9a] sm:px-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#d9ebfb] text-[#3b6ea8]">
+                <ShieldCheck size={16} />
+              </div>
+              <p className="font-medium">Your contact details will be hidden from the worker for your safety.</p>
+            </div>
+            <button type="button" className="hidden items-center gap-1 text-sm font-semibold text-[#3b6ea8] sm:inline-flex">
+              Learn more <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
+
         {!['COMPLETED', 'CANCELLED', 'REJECTED'].includes(booking.bookingStatus) && (
-          <div className="mt-4 flex flex-wrap items-center gap-4">
-            {booking.paymentStatus === 'PENDING' && (
-              <button onClick={() => payBooking(booking)} disabled={paying === booking._id} className="btn-primary text-sm disabled:opacity-50">
-                {paying === booking._id ? 'Opening payment...' : `Pay ₹${Number(booking.totalAmount || 0).toLocaleString('en-IN')}`}
-              </button>
-            )}
-            <button onClick={() => cancelBooking(booking._id)} disabled={cancelling === booking._id || paying === booking._id || cancellationRequested[booking._id]} className="inline-flex items-center gap-2 text-sm font-semibold text-error-500 disabled:opacity-50">
-              <XCircle size={16} /> {cancellationRequested[booking._id] ? 'Request sent to customer support' : cancelling === booking._id ? 'Cancelling...' : 'Cancel booking'}
+          <div className="mt-4">
+            <button onClick={() => cancelBooking(booking._id)} disabled={cancelling === booking._id || paying === booking._id || cancellationRequested[booking._id]} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#ff7c4d] px-4 py-3 text-base font-bold text-white shadow-[0_8px_20px_rgba(255,124,77,0.28)] transition hover:bg-[#f36f41] disabled:cursor-not-allowed disabled:opacity-60 sm:w-full">
+              <XCircle size={18} /> {cancellationRequested[booking._id] ? 'Request sent to customer support' : cancelling === booking._id ? 'Cancelling...' : 'Cancel booking'}
             </button>
           </div>
         )}
-        {booking.paymentStatus === 'PAID' && booking.bookingStatus === 'CONFIRMED' && (
-          <button onClick={() => verifyMeeting(booking, 'START')} disabled={currentTime < meetingStartTime(booking) - 60 * 60 * 1000} className="mt-3 btn-primary text-sm disabled:opacity-50">
-            {currentTime < meetingStartTime(booking) - 60 * 60 * 1000 ? 'Start confirmation unlocks 1 hour before' : 'Show start OTP to companion'}
-          </button>
-        )}
-        {booking.bookingStatus === 'ONGOING' && (
-          <div className="mt-3 flex flex-wrap gap-3"><button onClick={() => verifyMeeting(booking, 'END')} className="btn-primary text-sm">Show end OTP to companion</button><button onClick={() => extendMeeting(booking)} className="btn-ghost text-sm">Extend after original end</button></div>
-        )}
+
         {booking.paymentStatus === 'PAID' && !['CANCELLED', 'REJECTED'].includes(booking.bookingStatus) && (
-          <button onClick={() => onMessage(booking._id)} className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-coral-600">
-            <MessageCircle size={16} /> Message buddy
-          </button>
-        )}
-        {booking.paymentStatus === 'PAID' && !['COMPLETED', 'CANCELLED', 'REJECTED'].includes(booking.bookingStatus) && (
-          <div className="mt-4 rounded-2xl border border-ink-100 bg-ink-50 p-4">
-            <button onClick={() => showLiveMap(booking)} className="btn-ghost text-sm">Show companion location</button>
-            {openLocationMap === booking._id && <LiveLocationMap locations={locations[booking._id]} onClose={() => {
-              if (locationWatches.current[booking._id]) {
-                navigator.geolocation.clearWatch(locationWatches.current[booking._id]);
-                delete locationWatches.current[booking._id];
-              }
-              setOpenLocationMap(null);
-            }} onRefresh={async () => {
-              const refreshed = await apiRequest(`/bookings/${booking._id}/locations`);
-              setLocations((current) => ({ ...current, [booking._id]: refreshed }));
-            }} />}
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <div className="flex items-center gap-3 rounded-[20px] border border-[#eadfce] bg-[#f8f2ec] p-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#f5e2d2] text-[#d9864b]">
+                <MapPin size={20} />
+              </div>
+              <div>
+                <p className="text-xl font-extrabold text-ink-900">Location unlocks</p>
+                <p className="text-sm text-ink-600">{locationLocked ? '2h before meeting' : 'Unlocked now'}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 rounded-[20px] border border-[#dbe9f7] bg-[#edf6ff] p-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#dfeeff] text-[#3a6fb5]">
+                <Lock size={20} />
+              </div>
+              <div>
+                <p className="text-xl font-extrabold text-ink-900">Start OTP unlocks</p>
+                <p className="text-sm text-ink-600">{startOtpLocked ? '1h before meeting' : 'Ready now'}</p>
+              </div>
+            </div>
           </div>
         )}
+
+        {booking.paymentStatus === 'PAID' && !['CANCELLED', 'REJECTED'].includes(booking.bookingStatus) && (
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <button onClick={() => onMessage(booking._id)} className="inline-flex items-center justify-center gap-3 rounded-[18px] border border-[#d6d2cd] bg-white px-4 py-3 text-base font-semibold text-ink-800 transition hover:bg-ink-50">
+              <MessageCircle size={18} /> Message buddy
+            </button>
+            <button
+              onClick={() => !locationLocked && showLiveMap(booking)}
+              disabled={locationLocked}
+              className={`inline-flex items-center justify-center gap-3 rounded-[18px] border px-4 py-3 text-base font-semibold transition ${locationLocked ? 'cursor-not-allowed border-[#e5dfd7] bg-[#f3efe9] text-ink-400' : 'border-[#d6d2cd] bg-white text-ink-800 hover:bg-ink-50'}`}
+            >
+              <MapPin size={18} /> Show companion location
+            </button>
+          </div>
+        )}
+
+        {booking.bookingStatus === 'ONGOING' && (
+          <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <button onClick={() => verifyMeeting(booking, 'END')} className="btn-primary text-sm">Show end OTP to companion</button>
+            <button onClick={() => extendMeeting(booking)} className="btn-ghost text-sm">Extend after original end</button>
+          </div>
+        )}
+
         {booking.bookingStatus === 'COMPLETED' && booking.paymentStatus === 'PAID' && (
-          <button onClick={() => openReview(booking)} className="mt-4 text-sm font-semibold text-coral-600">
+          <button onClick={() => openReview(booking)} className="mt-5 text-sm font-semibold text-coral-600">
             {reviewBooking?.booking._id === booking._id && reviewBooking.review ? 'Edit your review' : 'Write a review'}
           </button>
         )}

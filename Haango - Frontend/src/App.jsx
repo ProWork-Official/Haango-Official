@@ -70,10 +70,10 @@ const getPageKeyFromPath = (pathname) => {
   if (pathname === '/' || pathname === '') return 'home';
   if (pathname.startsWith('/explore')) return 'explore';
   if (pathname.startsWith('/profile')) return 'profile';
+  if (pathname.startsWith('/bookings')) return 'bookings';
   if (pathname.startsWith('/booking')) return 'booking';
   if (pathname.startsWith('/messages')) return 'messages';
   if (pathname.startsWith('/dashboard')) return 'dashboard';
-  if (pathname.startsWith('/bookings')) return 'bookings';
   if (pathname.startsWith('/buddy-bookings')) return 'buddy-bookings';
   if (pathname.startsWith('/become-buddy')) return 'become-buddy';
   if (pathname.startsWith('/buddy-dashboard')) return 'buddy-dashboard';

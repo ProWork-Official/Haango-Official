@@ -323,7 +323,7 @@ export default function AdminPage({ onNavigate }) {
                         <HaangoDialog open={Boolean(dialog)} {...dialog} onCancel={() => setDialog(null)} />
                       </div>
                       <div className="flex gap-2">
-                      {buddy.verificationStatus === 'VERIFIED' && buddy.isAvailable !== false && buddy.showOnFindCompanions !== false && buddy.profileCompletion === 100 && (
+                      {buddy.verificationStatus === 'VERIFIED' && buddy.isAvailable !== false && buddy.showOnFindCompanions !== false && buddy.girlsOnly !== true && (
                         <button onClick={() => toggleFeaturedBuddy(buddy)} className={`rounded-xl px-3 py-2 text-xs font-semibold ${featuredBuddyIds.includes(buddy._id) ? 'bg-coral-500 text-white' : 'bg-coral-50 text-coral-700'}`}>
                           {featuredBuddyIds.includes(buddy._id) ? 'Featured' : 'Feature'}
                         </button>

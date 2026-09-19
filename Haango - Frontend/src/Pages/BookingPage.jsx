@@ -41,12 +41,14 @@ function getDayOptions() {
   return Array.from({ length: 6 }, (_, index) => {
     const date = new Date();
     date.setHours(0, 0, 0, 0);
-    date.setDate(date.getDate() + index + 1);
+    date.setDate(date.getDate() + index);
 
     return {
       label: index === 0
-        ? 'Tomorrow'
-        : date.toLocaleDateString('en-IN', {
+        ? 'Today'
+        : index === 1
+          ? 'Tomorrow'
+          : date.toLocaleDateString('en-IN', {
           weekday: 'long',
           month: 'short',
           day: 'numeric',

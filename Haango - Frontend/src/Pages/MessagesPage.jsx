@@ -8,6 +8,38 @@ function formatTime(value) {
   return value ? new Date(value).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
 }
 
+function renderUserAvatar(user, sizeClass) {
+  const image = user?.image || user?.profileImage || '';
+  const initials = user?.name
+    ? user.name
+        .split(' ')
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0])
+        .join('')
+        .toUpperCase()
+    : '?';
+
+  return (
+    <div className={`relative ${sizeClass}`}>
+      {image ? (
+        <img
+          src={image}
+          alt={user?.name || 'User'}
+          className="h-full w-full rounded-full object-cover bg-coral-100"
+          onError={(event) => {
+            const img = event.currentTarget;
+            img.style.display = 'none';
+            const fallback = img.parentElement?.querySelector('[data-avatar-fallback]');
+            if (fallback) fallback.classList.remove('hidden');
+          }}
+        />
+      ) : null}
+      <div data-avatar-fallback className={`${image ? 'hidden' : ''} flex h-full w-full items-center justify-center rounded-full bg-coral-100 font-semibold text-coral-700`}>{initials}</div>
+    </div>
+  );
+}
+
 export default function MessagesPage({ activeConversationId, onNavigate, onBack }) {
   const { profile } = useAuth();
   const [conversations, setConversations] = useState([]);
@@ -123,10 +155,12 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
       <div className="pt-16 md:pt-18 flex h-screen flex-col animate-fade-in">
         <div className="flex shrink-0 items-center gap-3 border-b border-ink-100 bg-white px-4 py-3">
           <button onClick={() => { setActiveId(null); onBack(); }} className="p-1.5 hover:bg-ink-100 md:hidden"><ArrowLeft size={20} /></button>
-          <div className="h-10 w-10 rounded-full bg-coral-100" />
+          <div className="shrink-0">{renderUserAvatar(active.otherUser, 'h-10 w-10')}</div>
           <div className="min-w-0 flex-1"><div className="flex items-center gap-1.5"><p className="truncate font-display font-semibold text-ink-900">{active.otherUser.name}</p><BadgeCheck size={14} className="text-teal-500" /></div><p className="text-xs text-ink-400">Paid booking conversation</p></div>
-          <button onClick={() => setShowSafety(true)} className="p-2 text-ink-500 hover:bg-ink-100"><MoreVertical size={18} /></button>
-          <button onClick={openCall} className="rounded-xl bg-coral-500 px-3 py-2 text-xs font-semibold text-white">Internet call</button>
+          <div className="ml-auto flex items-center gap-2">
+            <button onClick={openCall} className="rounded-xl bg-coral-500 px-3 py-2 text-xs font-semibold text-white">Internet call</button>
+            <button onClick={() => setShowSafety(true)} className="p-2 text-ink-500 hover:bg-ink-100"><MoreVertical size={18} /></button>
+          </div>
         </div>
         <div className="flex items-center gap-2 border-b border-coral-100 bg-coral-50 px-4 py-2.5 text-sm text-[#eb9381]"><Calendar size={16} /> {active.bookingContext}</div>
         <div className="flex-1 space-y-3 overflow-y-auto bg-ink-50 px-4 py-4">
@@ -142,5 +176,5 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
     );
   }
 
-  return <div className="min-h-screen pt-16 md:pt-18"><div className="border-b border-ink-100 bg-white"><div className="container-max section-pad py-6"><h1 className="font-display text-3xl font-extrabold text-ink-900">Messages</h1><p className="mt-2 text-ink-500">Messaging is available after a booking payment is completed.</p></div></div><div className="container-max max-w-2xl section-pad py-6">{error && <p className="mb-4 rounded-2xl bg-error-50 p-4 text-sm text-error-600">{error}</p>}{conversations.length ? <div className="space-y-2">{conversations.map((conversation) => <button key={conversation.id} onClick={() => setActiveId(conversation.id)} className="flex w-full items-center gap-4 rounded-3xl bg-white p-4 text-left hover:bg-ink-50"><div className="h-14 w-14 rounded-2xl bg-coral-100" /><div className="min-w-0 flex-1"><p className="font-display font-semibold text-ink-900">{conversation.otherUser.name}</p><p className="text-xs text-coral-500">{conversation.bookingContext}</p><p className="truncate text-sm text-ink-500">{conversation.lastMessage || 'Start the conversation'}</p></div><span className="text-xs text-ink-400">{formatTime(conversation.lastTime)}</span></button>)}</div> : <div className="py-20 text-center text-ink-500"><Send size={32} className="mx-auto mb-4 text-ink-300" /><p>No paid booking conversations yet.</p><button onClick={() => onNavigate('explore')} className="btn-primary mt-5">Find a Buddy</button></div>}</div></div>;
+return <div className="min-h-screen pt-16 md:pt-18"><div className="border-b border-ink-100 bg-white"><div className="container-max section-pad py-6"><h1 className="font-display text-3xl font-extrabold text-ink-900">Messages</h1><p className="mt-2 text-ink-500">Messaging is available after a booking payment is completed.</p></div></div><div className="container-max max-w-2xl section-pad py-6">{error && <p className="mb-4 rounded-2xl bg-error-50 p-4 text-sm text-error-600">{error}</p>}{conversations.length ? <div className="space-y-2">{conversations.map((conversation) => <button key={conversation.id} onClick={() => setActiveId(conversation.id)} className="flex w-full items-center gap-4 rounded-3xl bg-white p-4 text-left hover:bg-ink-50"><div className="shrink-0">{renderUserAvatar(conversation.otherUser, 'h-14 w-14')}</div><div className="min-w-0 flex-1"><p className="font-display font-semibold text-ink-900">{conversation.otherUser.name}</p><p className="text-xs text-coral-500">{conversation.bookingContext}</p><p className="truncate text-sm text-ink-500">{conversation.lastMessage || 'Start the conversation'}</p></div><span className="text-xs text-ink-400">{formatTime(conversation.lastTime)}</span></button>)}</div> : <div className="py-20 text-center text-ink-500"><Send size={32} className="mx-auto mb-4 text-ink-300" /><p>No paid booking conversations yet.</p><button onClick={() => onNavigate('explore')} className="btn-primary mt-5">Find a Buddy</button></div>}</div></div>;
 }
