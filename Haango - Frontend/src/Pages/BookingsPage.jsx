@@ -50,6 +50,7 @@ export default function BookingsPage({ onBack, onMessage }) {
   const [locationMessage, setLocationMessage] = useState('');
   const [openLocationMap, setOpenLocationMap] = useState(null);
   const [meetingOtp, setMeetingOtp] = useState(null);
+  const [startOtpLoading, setStartOtpLoading] = useState(null);
   const [dialog, setDialog] = useState(null);
   const [cancellationRequested, setCancellationRequested] = useState(() => JSON.parse(localStorage.getItem('haango_cancellation_requests') || '{}'));
   const locationWatches = useRef({});
@@ -178,10 +179,15 @@ export default function BookingsPage({ onBack, onMessage }) {
   };
 
   const verifyMeeting = async (booking, phase) => {
+    if (phase === 'START') setStartOtpLoading(booking._id);
     try {
       const response = await apiRequest(`/bookings/${booking._id}/meeting/otp`, { method: 'POST', body: JSON.stringify({ phase }) });
       setMeetingOtp({ bookingId: booking._id, phase, code: response.code, expiresAt: response.expiresAt });
-    } catch (meetingError) { setError(meetingError.message || 'Unable to confirm meeting.'); }
+    } catch (meetingError) {
+      setError(meetingError.message || 'Unable to confirm meeting.');
+    } finally {
+      if (phase === 'START') setStartOtpLoading(null);
+    }
   };
 
   const meetingStartTime = (booking) => {
@@ -475,10 +481,15 @@ export default function BookingsPage({ onBack, onMessage }) {
           <div className="mt-5 flex flex-wrap items-center gap-3">
             <button
               onClick={() => !startOtpLocked && verifyMeeting(booking, 'START')}
-              disabled={startOtpLocked}
+              disabled={startOtpLocked || startOtpLoading === booking._id}
               className="btn-primary w-full text-sm disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
             >
-              {startOtpLocked ? 'Start OTP unlocks 1 hour before meeting' : 'Show start OTP'}
+              {startOtpLoading === booking._id ? (
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                  Loading...
+                </span>
+              ) : startOtpLocked ? 'Start OTP unlocks 1 hour before meeting' : 'Show start OTP'}
             </button>
             {meetingOtp?.bookingId === booking._id && meetingOtp.phase === 'START' && (
               <div className="flex items-center gap-3 rounded-xl border border-coral-200 bg-coral-50 px-3 py-2">

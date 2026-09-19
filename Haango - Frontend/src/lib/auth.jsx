@@ -74,8 +74,13 @@ export function AuthProvider({ children }) {
       let activeToken = storedToken;
       let userPayload;
 
+      if (!storedToken) {
+        setSession(null);
+        setProfile(null);
+        return;
+      }
+
       try {
-        if (!storedToken) throw new Error('No local access token');
         userPayload = await apiRequest('/auth/me');
       } catch (error) {
         const refreshed = await apiRequest('/auth/refresh', { method: 'POST' });

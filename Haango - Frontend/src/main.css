@@ -160,26 +160,6 @@ h6 {
   transform: scale(0.97);
 }
 
-button[data-loading="true"] {
-  cursor: wait;
-  opacity: 0.72;
-}
-
-button[data-loading="true"]::after {
-  width: 0.9rem;
-  height: 0.9rem;
-  content: '';
-  flex: 0 0 auto;
-  border: 2px solid currentColor;
-  border-right-color: transparent;
-  border-radius: 9999px;
-  animation: button-spinner 650ms linear infinite;
-}
-
-@keyframes button-spinner {
-  to { transform: rotate(360deg); }
-}
-
 
 /* Card */
 .card {
