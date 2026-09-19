@@ -11,6 +11,7 @@ import CancellationRequest from '../models/CancellationRequest.js';
 import User from '../models/User.js';
 import { sendOtpEmail } from './emailService.js';
 import LocationAccessLog from '../models/LocationAccessLog.js';
+import CallSignal from '../models/CallSignal.js';
 import { recordAdminAction } from './adminAuditService.js';
 import { creditWallet } from './customerWalletService.js';
 import { findAvailableCoupon } from './couponService.js';
@@ -378,7 +379,8 @@ export async function sendCallSignal(bookingId, userId, type, payload) {
   await getCallBooking(bookingId, userId);
   const session = callSessions.get(String(bookingId));
   if (!session || !session.participants.has(String(userId))) throw forbidden('Join the call before sending a signal');
-  session.messages.push({ sequence: ++session.sequence, senderId: String(userId), type, payload, createdAt: Date.now() });
+  const signal = await CallSignal.create({ bookingId, senderId: userId, type, payload });
+  session.messages.push({ sequence: ++session.sequence, senderId: String(userId), type, payload, createdAt: signal.createdAt.getTime() });
   session.lastActivity = Date.now();
   const subscribers = callSubscribers.get(String(bookingId)) || new Set();
   subscribers.forEach((subscriber) => {
@@ -402,21 +404,37 @@ export async function subscribeCallSignals(bookingId, userId, response) {
   subscriber.heartbeat = setInterval(() => response.write(': keep-alive\n\n'), 15000);
   response.on('close', () => clearInterval(subscriber.heartbeat));
   response.write(': connected\n\n');
-  const activeRequest = session?.messages.find((message) => (
-    message.type === 'CALL_REQUEST'
-    && message.createdAt
-    && Date.now() - message.createdAt < 60 * 1000
-  ));
-  if (activeRequest && activeRequest.senderId !== String(userId)) subscriber.send(activeRequest);
+  const activeRequest = await CallSignal.findOne({
+    bookingId,
+    type: 'CALL_REQUEST',
+    senderId: { $ne: userId },
+    createdAt: { $gte: new Date(Date.now() - 60 * 1000) },
+  }).sort({ createdAt: -1 }).lean();
+  if (activeRequest) subscriber.send({
+    sequence: 0,
+    senderId: String(activeRequest.senderId),
+    type: activeRequest.type,
+    payload: activeRequest.payload,
+    createdAt: activeRequest.createdAt.getTime(),
+  });
 }
 
 export async function pollCallSignals(bookingId, userId, after = 0) {
-  const booking = await getCallBooking(bookingId, userId, false);
-  if (!isCallUnlocked(booking)) return [];
+  await getCallBooking(bookingId, userId, false);
   const session = callSessions.get(String(bookingId));
-  if (!session) return [];
-  session.lastActivity = Date.now();
-  return session.messages.filter((message) => message.senderId !== String(userId) && message.sequence > Number(after || 0));
+  if (session) session.lastActivity = Date.now();
+  const signals = await CallSignal.find({
+    bookingId,
+    senderId: { $ne: userId },
+    createdAt: { $gte: new Date(Date.now() - 60 * 1000) },
+  }).sort({ createdAt: 1 }).lean();
+  return signals.map((signal) => ({
+    sequence: signal.createdAt.getTime(),
+    senderId: String(signal.senderId),
+    type: signal.type,
+    payload: signal.payload,
+    createdAt: signal.createdAt.getTime(),
+  }));
 }
 
 export async function leaveCall(bookingId, userId) {
