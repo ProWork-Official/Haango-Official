@@ -1,6 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
-import { ArrowLeft, BadgeCheck, Calendar, Flag, MoreVertical, Phone, Send, Shield, X } from 'lucide-react';
+import {
+  ArrowLeft,
+  BadgeCheck,
+  Calendar,
+  Check,
+  CheckCheck,
+  Flag,
+  MoreVertical,
+  Phone,
+  Send,
+  Shield,
+  X,
+} from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import HaangoDialog from '../Components/HaangoDialog';
@@ -16,6 +28,34 @@ const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5005';
 
 function formatTime(value) {
   return value ? new Date(value).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
+}
+
+function renderMessageStatus(message, mine) {
+  if (!mine) return null;
+
+  if (message?.isRead) {
+    return (
+      <span className="ml-1 inline-flex items-center gap-0.5 text-emerald-200">
+        <CheckCheck size={14} className="fill-current" />
+        <CheckCheck size={14} className="fill-current" />
+      </span>
+    );
+  }
+
+  if (message?.isDelivered !== false) {
+    return (
+      <span className="ml-1 inline-flex items-center gap-0.5 text-white/80">
+        <Check size={14} className="fill-current" />
+        <Check size={14} className="fill-current" />
+      </span>
+    );
+  }
+
+  return (
+    <span className="ml-1 inline-flex items-center text-white/80">
+      <Check size={14} className="fill-current" />
+    </span>
+  );
 }
 
 function renderUserAvatar(user, sizeClass) {
@@ -260,6 +300,7 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
       setCallType('incoming');
       setCallState('connected');
       setIsSpeakerOn(true);
+      addCallStatusMessage('accepted');
       startCallTimer();
 
       socketRef.current?.emit('call:answer', {
@@ -284,6 +325,8 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
     clearCallTimeout();
     stopCallTone();
     playCallEndedTone();
+
+    addCallStatusMessage('rejected');
 
     if (socketRef.current && callIdRef.current) {
       socketRef.current.emit('call:reject', {
@@ -314,6 +357,31 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
 
     playCallEndedTone();
     cleanupCallSession();
+  };
+
+  const addCallStatusMessage = (type) => {
+    const statusLabel = type === 'accepted' ? 'Call accepted' : 'Call rejected';
+
+    setMessages((current) => {
+      if (current.some((message) => message?.type === 'call-status' && message?.callStatus === type)) {
+        return current;
+      }
+
+      return [
+        ...current,
+        {
+          _id: `call-status-${type}-${Date.now()}`,
+          type: 'call-status',
+          callStatus: type,
+          message: statusLabel,
+          senderId: 'system',
+          receiverId: profile?.id || active?.otherUser?.id,
+          createdAt: new Date().toISOString(),
+          isRead: true,
+          isDelivered: true,
+        },
+      ];
+    });
   };
 
   const renderCallOverlay = () => {
@@ -431,6 +499,7 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
       if (!payload || String(payload.toUserId) !== String(profile.id)) return;
       stopCallTone();
       playCallEndedTone();
+      addCallStatusMessage('rejected');
       cleanupCallSession();
     });
 
@@ -476,6 +545,7 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
       }
 
       stopCallTone();
+      addCallStatusMessage('accepted');
       setCallState('connected');
       startCallTimer();
     });
@@ -549,8 +619,8 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
   }, [activeId]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length]);
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [messages.length, activeId]);
 
   const sendMessage = async () => {
     if (!input.trim() || !activeId || sending) return;
@@ -669,21 +739,36 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
             {active.bookingContext}
           </div>
 
-          <div className="flex-1 space-y-3 overflow-y-auto bg-ink-50 px-4 py-4">
-            {messages.map((message) => {
-              const mine = String(message.senderId) === String(profile?.id);
-              return (
-                <div key={message._id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${mine ? 'rounded-br-md bg-[#FF6B4A] text-white' : 'rounded-bl-md bg-white text-ink-800 shadow-soft'}`}>
-                    <p className="text-sm leading-relaxed">{message.message}</p>
-                    <p className={`mt-1 text-[10px] ${mine ? 'text-white/60' : 'text-ink-400'}`}>
-                      {formatTime(message.createdAt)}
-                    </p>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-ink-50">
+            <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+              {messages.map((message) => {
+                const mine = String(message.senderId) === String(profile?.id);
+
+                if (message?.type === 'call-status') {
+                  const isAccepted = message.callStatus === 'accepted';
+                  return (
+                    <div key={message._id} className="flex justify-center">
+                      <div className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-medium ${isAccepted ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700'}`}>
+                        {message.message}
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div key={message._id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${mine ? 'rounded-br-md bg-[#FF6B4A] text-white' : 'rounded-bl-md bg-white text-ink-800 shadow-soft'}`}>
+                      <p className="text-sm leading-relaxed">{message.message}</p>
+                      <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${mine ? 'text-white/60' : 'text-ink-400'}`}>
+                        <span>{formatTime(message.createdAt)}</span>
+                        {renderMessageStatus(message, mine)}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-            <div ref={messagesEndRef} />
+                );
+              })}
+              <div ref={messagesEndRef} />
+            </div>
           </div>
 
           <div className="flex shrink-0 items-center gap-2 border-t border-ink-100 bg-white px-4 py-3">

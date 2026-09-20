@@ -27,7 +27,7 @@ function getDraftState(profile, passedDraft = null) {
   };
 }
 
-export default function DashboardPage({ onNavigate, onSelectBuddy, onMessage }) {
+export default function DashboardPage({ onNavigate, onSelectBuddy, onMessage, unreadCount = 0 }) {
   const { profile, updateProfile, dismissProfilePrompt } = useAuth();
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -433,9 +433,14 @@ export default function DashboardPage({ onNavigate, onSelectBuddy, onMessage }) 
             <button
               type="button"
               onClick={() => onNavigate('messages')}
-              className="btn-secondary w-full"
+              className="btn-secondary relative w-full"
             >
-              Open messages
+              <span className="inline-flex items-center gap-2">Open messages</span>
+              {unreadCount > 0 && (
+                <span className="absolute -right-2 -top-2 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
             </button>
 
             {['ADMIN', 'SUPER_ADMIN', 'MASTER_ADMIN'].includes(profile?.role) && (

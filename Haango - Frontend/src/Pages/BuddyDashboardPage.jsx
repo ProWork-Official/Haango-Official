@@ -462,7 +462,7 @@ function ProfileEditor({ profile, user, loading, onSaved }) {
   );
 }
 
-export default function BuddyDashboardPage({ onNavigate }) {
+export default function BuddyDashboardPage({ onNavigate, unreadCount = 0 }) {
   const { user, profile: authProfile } = useAuth();
   const [availabilityOpen, setAvailabilityOpen] = useState(false);
   const [buddyProfile, setBuddyProfile] = useState(null);
@@ -830,8 +830,13 @@ export default function BuddyDashboardPage({ onNavigate }) {
               <button type="button" onClick={() => onNavigate('buddy-bookings')} className="btn-secondary mt-4 w-full">
                 View all bookings
               </button>
-              <button type="button" onClick={() => onNavigate('messages')} className="btn-primary mt-3 w-full">
-                Open messages
+              <button type="button" onClick={() => onNavigate('messages')} className="btn-primary relative mt-3 w-full">
+                <span className="inline-flex items-center gap-2">Open messages</span>
+                {unreadCount > 0 && (
+                  <span className="absolute -right-2 -top-2 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
               </button>
             </div>
 

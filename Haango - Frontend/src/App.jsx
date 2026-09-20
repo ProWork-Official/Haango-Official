@@ -103,6 +103,7 @@ function AppContent() {
   const [selectedBuddy, setSelectedBuddy] = useState(null);
   const [selectedActivity, setSelectedActivity] = useState(null);
   const [activeConversation, setActiveConversation] = useState(null);
+  const [messageUnreadCount, setMessageUnreadCount] = useState(0);
   const [prevPage, setPrevPage] = useState('/');
   const [pendingAuthPath, setPendingAuthPath] = useState(null);
 
@@ -183,6 +184,28 @@ function AppContent() {
     await signOut();
     routeNavigate('home');
   };
+
+  useEffect(() => {
+    if (!user) {
+      setMessageUnreadCount(0);
+      return undefined;
+    }
+
+    let active = true;
+    apiRequest('/messages/conversations')
+      .then((data) => {
+        if (!active || !Array.isArray(data)) return;
+        const totalUnread = data.reduce((count, conversation) => count + Number(conversation.unreadCount || 0), 0);
+        setMessageUnreadCount(totalUnread);
+      })
+      .catch(() => {
+        if (active) setMessageUnreadCount(0);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [user, location.pathname, profile?.id]);
 
   const showFooter = !['/messages'].includes(location.pathname) || !activeConversation;
   const showBottomNav = !['/booking', '/messages', '/login', '/signup'].includes(location.pathname) || (location.pathname === '/messages' && !activeConversation);
@@ -271,6 +294,7 @@ function AppContent() {
               <DashboardPage
                 onNavigate={routeNavigate}
                 onMessage={startConversation}
+                unreadCount={messageUnreadCount}
                 onSelectBuddy={(id) => {
                   selectBuddy(id);
                   routeNavigate('/profile');
@@ -291,7 +315,7 @@ function AppContent() {
 
           <Route path="/become-buddy" element={<BecomeBuddyPage onNavigate={routeNavigate} />} />
           <Route path="/buddy-dashboard" element={
-            user ? <BuddyDashboardPage onNavigate={routeNavigate} /> : <Navigate to="/login" replace />
+            user ? <BuddyDashboardPage onNavigate={routeNavigate} unreadCount={messageUnreadCount} /> : <Navigate to="/login" replace />
           } />
 
           <Route path="/experience" element={<ExperiencePage onNavigate={routeNavigate} />} />
@@ -344,7 +368,7 @@ function AppContent() {
 
       {showFooter && <Footer onNavigate={routeNavigate} />}
 
-      {showBottomNav && <BottomNav current={currentPage} onNavigate={routeNavigate} />}
+      {showBottomNav && <BottomNav current={currentPage} onNavigate={routeNavigate} unreadCount={messageUnreadCount} />}
     </div>
   );
 }
