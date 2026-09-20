@@ -39,13 +39,10 @@ export default function CallScreen({
       ? 'Incoming call'
       : callState === 'connected'
         ? 'Connected'
-        : callState === 'missed'
-          ? 'Missed call'
-          : callState === 'rejected'
-            ? 'Call rejected'
-            : 'Call ended';
+        : 'Call ended';
 
   const isConnected = callState === 'connected';
+  const showIncomingActions = callState === 'ringing';
 
   return (
     <div className="fixed inset-0 z-[60] bg-[#160f1c]/75 backdrop-blur-md">
@@ -115,40 +112,23 @@ export default function CallScreen({
               </button>
             </div>
 
-            {(isIncoming || callState === 'dialing') && (
+            {showIncomingActions && (
               <div className="mt-8 grid grid-cols-2 gap-3">
-                {isIncoming && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={onAccept}
-                      className="flex items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,_#2dd4bf,_#0ea5a4)] px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-900/40 transition hover:brightness-110"
-                    >
-                      <Check size={18} />
-                      Accept
-                    </button>
-                    <button
-                      type="button"
-                      onClick={onReject}
-                      className="flex items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,_#f97316,_#ef4444)] px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-rose-900/30 transition hover:brightness-110"
-                    >
-                      <PhoneOff size={18} />
-                      Reject
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-
-            {!isConnected && !isIncoming && callState !== 'dialing' && (
-              <div className="mt-8">
                 <button
                   type="button"
-                  onClick={onEnd}
-                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white/5 px-4 py-3 text-sm font-semibold text-white/80"
+                  onClick={onAccept}
+                  className="flex items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,_#2dd4bf,_#0ea5a4)] px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-900/40 transition hover:brightness-110"
                 >
-                  <Phone size={16} />
-                  Back to chat
+                  <Check size={18} />
+                  Accept
+                </button>
+                <button
+                  type="button"
+                  onClick={onReject}
+                  className="flex items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,_#f97316,_#ef4444)] px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-rose-900/30 transition hover:brightness-110"
+                >
+                  <PhoneOff size={18} />
+                  Reject
                 </button>
               </div>
             )}

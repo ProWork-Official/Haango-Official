@@ -217,7 +217,7 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
 
         stopCallTone();
         playCallEndedTone();
-        cleanupCallSession('missed');
+        cleanupCallSession();
       }, 30000);
 
       socketRef.current?.emit('call:invite', {
@@ -294,7 +294,7 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
       });
     }
 
-    cleanupCallSession('missed');
+    cleanupCallSession();
   };
 
   const endCall = () => {
@@ -316,44 +316,48 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
     cleanupCallSession();
   };
 
-  const renderCallOverlay = () => (
-    <>
-      <audio ref={remoteAudioRef} autoPlay playsInline />
+  const renderCallOverlay = () => {
+    const isOverlayVisible = ['dialing', 'ringing', 'connected'].includes(callState) && Boolean(callPeer || active?.otherUser);
 
-      <CallScreen
-        visible={callState !== 'idle'}
-        peer={callPeer || active?.otherUser}
-        callState={callState}
-        callType={callType}
-        isMuted={isMuted}
-        isSpeakerOn={isSpeakerOn}
-        callDuration={callDuration}
-        onAccept={acceptIncomingCall}
-        onReject={rejectCall}
-        onEnd={endCall}
-        onToggleMute={() => {
-          setIsMuted((current) => {
-            const next = !current;
-            if (localStreamRef.current) {
-              localStreamRef.current.getAudioTracks().forEach((track) => {
-                track.enabled = !next;
-              });
-            }
-            return next;
-          });
-        }}
-        onToggleSpeaker={() => {
-          setIsSpeakerOn((current) => {
-            const next = !current;
-            if (remoteAudioRef.current) {
-              remoteAudioRef.current.muted = !next;
-            }
-            return next;
-          });
-        }}
-      />
-    </>
-  );
+    return (
+      <>
+        <audio ref={remoteAudioRef} autoPlay playsInline />
+
+        <CallScreen
+          visible={isOverlayVisible}
+          peer={callPeer || active?.otherUser}
+          callState={callState}
+          callType={callType}
+          isMuted={isMuted}
+          isSpeakerOn={isSpeakerOn}
+          callDuration={callDuration}
+          onAccept={acceptIncomingCall}
+          onReject={rejectCall}
+          onEnd={endCall}
+          onToggleMute={() => {
+            setIsMuted((current) => {
+              const next = !current;
+              if (localStreamRef.current) {
+                localStreamRef.current.getAudioTracks().forEach((track) => {
+                  track.enabled = !next;
+                });
+              }
+              return next;
+            });
+          }}
+          onToggleSpeaker={() => {
+            setIsSpeakerOn((current) => {
+              const next = !current;
+              if (remoteAudioRef.current) {
+                remoteAudioRef.current.muted = !next;
+              }
+              return next;
+            });
+          }}
+        />
+      </>
+    );
+  };
 
   useEffect(() => {
     if (!profile?.id) return undefined;
@@ -427,14 +431,14 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
       if (!payload || String(payload.toUserId) !== String(profile.id)) return;
       stopCallTone();
       playCallEndedTone();
-      cleanupCallSession('missed');
+      cleanupCallSession();
     });
 
     socket.on('call:missed', (payload) => {
       if (!payload || String(payload.toUserId) !== String(profile.id)) return;
       stopCallTone();
       playCallEndedTone();
-      cleanupCallSession('missed');
+      cleanupCallSession();
     });
 
     socket.on('call:end', (payload) => {
