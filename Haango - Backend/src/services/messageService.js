@@ -70,6 +70,8 @@ export async function sendMessage(bookingId, senderId, text) {
     senderId,
     receiverId,
     message: sanitizedMessage,
+    isDelivered: true,
+    isRead: false,
   });
 
   return message;
@@ -101,6 +103,12 @@ export async function getConversations(userId) {
   const conversations = [];
   for (const booking of bookings) {
     const lastMessage = await Message.findOne({ bookingId: booking._id }).sort({ createdAt: -1 });
+    const unreadCount = await Message.countDocuments({
+      bookingId: booking._id,
+      receiverId: userId,
+      isRead: false,
+    });
+
     conversations.push({
       bookingId: booking._id,
       id: String(booking._id),
@@ -110,6 +118,7 @@ export async function getConversations(userId) {
       bookingContext: `${booking.activitySlug} · ${booking.date.toDateString()}`,
       lastMessage: lastMessage?.message || '',
       lastTime: lastMessage?.createdAt || booking.updatedAt,
+      unreadCount,
       isOtherUserOnline: false,
     });
   }
