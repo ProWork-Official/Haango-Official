@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { io } from 'socket.io-client';
 import Navbar from './Components/Navbar';
 import BottomNav from './Components/BottomNav';
 import Footer from './Components/Footer';
@@ -22,6 +23,7 @@ import BookingsPage from './Pages/BookingsPage';
 import BuddyBookingsPage from './Pages/BuddyBookingsPage';
 import { AuthProvider, useAuth } from './lib/auth';
 import { apiRequest } from './lib/api';
+import { registerPushSubscription, requestBrowserNotificationPermission, triggerBrowserNotification } from './lib/browserNotifications';
 import AdminAllUsersPage from './Pages/AdminAllUsersPage';
 import AdminCouponsPage from './Pages/AdminCouponsPage';
 import ContactPage from './Pages/ContactPage';
@@ -33,6 +35,7 @@ import TermsPage from './Pages/TermsPage';
 import CancellationPolicyPage from './Pages/CancellationPolicyPage';
 
 const protectedPaths = ['/dashboard', '/bookings', '/buddy-bookings', '/messages', '/admin', '/buddy-dashboard'];
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5005';
 
 const getRoutePath = (page) => {
   const pathMap = {
@@ -106,6 +109,130 @@ function AppContent() {
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
   const [prevPage, setPrevPage] = useState('/');
   const [pendingAuthPath, setPendingAuthPath] = useState(null);
+  const browserNotificationIdsRef = useRef(new Set());
+
+  const refreshUnreadCount = () => {
+    if (!user) return;
+
+    apiRequest('/messages/conversations')
+      .then((data) => {
+        if (!Array.isArray(data)) return;
+        setMessageUnreadCount(data.reduce((count, conversation) => count + Number(conversation.unreadCount || 0), 0));
+      })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    if (location.pathname !== '/') return undefined;
+
+    requestBrowserNotificationPermission()
+      .then((permission) => {
+        if (permission === 'granted' && user) {
+          return registerPushSubscription(apiRequest);
+        }
+        return null;
+      })
+      .catch(() => {
+      // Notification permission must never interrupt the normal home-page flow.
+      });
+
+    return undefined;
+  }, [location.pathname, user]);
+
+  useEffect(() => {
+    if (!user || !('Notification' in window)) {
+      browserNotificationIdsRef.current.clear();
+      return undefined;
+    }
+
+    let active = true;
+    if (Notification.permission === 'granted') {
+      registerPushSubscription(apiRequest).catch(() => {});
+    }
+
+    const notifyIfNeeded = async () => {
+      try {
+        if (Notification.permission !== 'granted') return;
+
+        const data = await apiRequest('/notifications?limit=20');
+        const notifications = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+
+        notifications
+          .filter((notification) => !notification.isRead && ['BOOKING_CONFIRMED', 'NEW_MESSAGE'].includes(notification.type))
+          .forEach((notification) => {
+            const notificationId = String(notification._id || notification.id || `${notification.type}-${notification.createdAt}`);
+            if (browserNotificationIdsRef.current.has(notificationId)) return;
+
+            browserNotificationIdsRef.current.add(notificationId);
+
+            new Notification(notification.title || 'Haango update', {
+              body: notification.message,
+              tag: notificationId,
+              icon: '/favicon.ico',
+            });
+          });
+      } catch {
+        // ignore notification polling failures silently
+      }
+    };
+
+    notifyIfNeeded();
+    const interval = window.setInterval(() => {
+      if (active) notifyIfNeeded();
+    }, 5000);
+
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [user, profile?.id]);
+
+  useEffect(() => {
+    if (!profile?.id) return undefined;
+
+    const socket = io(SOCKET_URL, {
+      autoConnect: true,
+      withCredentials: true,
+      reconnection: true,
+      auth: { token: localStorage.getItem('haango_access_token') },
+    });
+
+    socket.on('connect', () => {
+      socket.emit('join-user', String(profile.id));
+    });
+
+    socket.on('message:new', () => {
+      refreshUnreadCount();
+    });
+
+    socket.on('message:read', () => {
+      refreshUnreadCount();
+    });
+
+    socket.on('notification:new', (notification) => {
+      if (!notification || !['BOOKING_CONFIRMED', 'NEW_MESSAGE'].includes(notification.type)) return;
+
+      const notificationId = String(notification._id || notification.id || `${notification.type}-${notification.createdAt}`);
+      if (browserNotificationIdsRef.current.has(notificationId)) return;
+      browserNotificationIdsRef.current.add(notificationId);
+
+      triggerBrowserNotification({
+        title: notification.title,
+        body: notification.message,
+        tag: notificationId,
+      });
+      refreshUnreadCount();
+    });
+
+    const refreshInterval = window.setInterval(() => {
+      refreshUnreadCount();
+    }, 5000);
+
+    return () => {
+      window.clearInterval(refreshInterval);
+      socket.disconnect();
+    };
+  }, [profile?.id, user]);
 
   useEffect(() => {
     const storageKey = 'haango_visitor_id';
@@ -341,6 +468,11 @@ function AppContent() {
           <Route path="/admin/coupons" element={
             ['ADMIN', 'SUPER_ADMIN', 'MASTER_ADMIN'].includes(profile?.role)
               ? <AdminCouponsPage onNavigate={routeNavigate} />
+              : <Navigate to="/" replace />
+          } />
+          <Route path="/admin/support-requests" element={
+            ['ADMIN', 'SUPER_ADMIN', 'MASTER_ADMIN'].includes(profile?.role)
+              ? <AdminPage onNavigate={routeNavigate} supportRequestOnly />
               : <Navigate to="/" replace />
           } />
 

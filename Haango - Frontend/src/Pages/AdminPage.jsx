@@ -19,7 +19,7 @@ const unwrapDashboard = (value) => {
 };
 const optionalRequest = (path) => apiRequest(path).catch(() => null);
 
-export default function AdminPage({ onNavigate }) {
+export default function AdminPage({ onNavigate, supportRequestOnly = false }) {
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
   const [adminUsers, setAdminUsers] = useState([]);
@@ -29,6 +29,7 @@ export default function AdminPage({ onNavigate }) {
   const [reports, setReports] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [cancellationRequests, setCancellationRequests] = useState([]);
+  const [supportRequests, setSupportRequests] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
   const [editing, setEditing] = useState(null);
   const [buddyEditing, setBuddyEditing] = useState(null);
@@ -40,7 +41,7 @@ export default function AdminPage({ onNavigate }) {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [dashboard, usersData, adminUsersData, buddiesData, featuredData, bookingsData, reportsData, reviewsData, cancellationsData, daily, trend, pages] = await Promise.all([
+      const [dashboard, usersData, adminUsersData, buddiesData, featuredData, bookingsData, reportsData, reviewsData, cancellationsData, supportData, daily, trend, pages] = await Promise.all([
         apiRequest('/admin/dashboard'),
         apiRequest('/admin/users?limit=50'),
         apiRequest('/admin/admin-users?limit=50'),
@@ -50,6 +51,7 @@ export default function AdminPage({ onNavigate }) {
         apiRequest('/admin/reports?limit=50'),
         optionalRequest('/admin/reviews?limit=50'),
         apiRequest('/admin/cancellation-requests'),
+        optionalRequest('/support-requests/admin/all?limit=50'),
         apiRequest('/analytics/daily-traffic'),
         apiRequest('/analytics/traffic-trend?days=7'),
         apiRequest('/analytics/popular-pages?days=7'),
@@ -63,6 +65,7 @@ export default function AdminPage({ onNavigate }) {
       setReports(unwrapList(reportsData));
       setReviews(unwrapList(reviewsData));
       setCancellationRequests(unwrapList(cancellationsData));
+      setSupportRequests(unwrapList(supportData));
       setAnalytics({ daily: unwrap(daily), trend: unwrapArray(trend), pages: unwrapArray(pages) });
     } catch (loadError) {
       setError(loadError.message || 'Unable to load admin data.');
@@ -76,7 +79,7 @@ export default function AdminPage({ onNavigate }) {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [dashboard, usersData, adminUsersData, buddiesData, featuredData, bookingsData, reportsData, reviewsData, cancellationsData, daily, trend, pages] = await Promise.all([
+        const [dashboard, usersData, adminUsersData, buddiesData, featuredData, bookingsData, reportsData, reviewsData, cancellationsData, supportData, daily, trend, pages] = await Promise.all([
           apiRequest('/admin/dashboard'),
           apiRequest('/admin/users?limit=50'),
           apiRequest('/admin/admin-users?limit=50'),
@@ -86,6 +89,7 @@ export default function AdminPage({ onNavigate }) {
           apiRequest('/admin/reports?limit=50'),
           optionalRequest('/admin/reviews?limit=50'),
           apiRequest('/admin/cancellation-requests'),
+          optionalRequest('/support-requests/admin/all?limit=50'),
           apiRequest('/analytics/daily-traffic'),
           apiRequest('/analytics/traffic-trend?days=7'),
           apiRequest('/analytics/popular-pages?days=7'),
@@ -100,6 +104,7 @@ export default function AdminPage({ onNavigate }) {
         setReports(unwrapList(reportsData));
         setReviews(unwrapList(reviewsData));
         setCancellationRequests(unwrapList(cancellationsData));
+        setSupportRequests(unwrapList(supportData));
         setAnalytics({ daily: unwrap(daily), trend: unwrapArray(trend), pages: unwrapArray(pages) });
       } catch (loadError) {
         if (active) setError(loadError.message || 'Unable to load admin data.');
@@ -219,6 +224,21 @@ export default function AdminPage({ onNavigate }) {
     } catch (reviewError) { setError(reviewError.message || 'Unable to review cancellation request.'); }
   };
 
+  const resolveSupportRequest = async (request, status = 'RESOLVED') => {
+    const adminReply = window.prompt('Write a reply to the user (optional):', request.adminReply || '');
+    if (adminReply === null) return;
+
+    try {
+      await apiRequest(`/support-requests/admin/${request._id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status, adminReply: adminReply || '' }),
+      });
+      await loadData();
+    } catch (supportError) {
+      setError(supportError.message || 'Unable to update support request.');
+    }
+  };
+
   const promoteToAdmin = async (userId) => {
     try {
       await apiRequest(`/admin/users/${userId}/promote-to-admin`, { method: 'POST', body: JSON.stringify({ userId }) });
@@ -300,12 +320,47 @@ export default function AdminPage({ onNavigate }) {
 
   return (
     <div className="min-h-screen bg-ink-50 pb-20 pt-16 md:pt-18">
-      <div className="border-b border-ink-100 bg-white"><div className="container-max section-pad flex items-center justify-between gap-4 py-6"><div><div className="mb-2 inline-flex items-center gap-2 rounded-full bg-ink-900 px-3 py-1.5 text-xs font-semibold text-white"><Shield size={14} /> Admin Dashboard</div><h1 className="font-display text-3xl font-extrabold text-ink-900">Haango Operations</h1></div><div className="flex items-center gap-2"><button onClick={() => onNavigate('/admin/coupons')} className="btn-secondary">Manage coupons</button><button onClick={() => onNavigate('home')} className="btn-ghost">Back to Haango</button></div></div></div>
+      <div className="border-b border-ink-100 bg-white"><div className="container-max section-pad flex items-center justify-between gap-4 py-6"><div><div className="mb-2 inline-flex items-center gap-2 rounded-full bg-ink-900 px-3 py-1.5 text-xs font-semibold text-white"><Shield size={14} /> Admin Dashboard</div><h1 className="font-display text-3xl font-extrabold text-ink-900">Haango Operations</h1></div><div className="flex items-center gap-2"><button onClick={() => onNavigate('/admin/support-requests')} className="btn-secondary">Support tickets</button><button onClick={() => onNavigate('/admin/coupons')} className="btn-secondary">Manage coupons</button><button onClick={() => onNavigate('home')} className="btn-ghost">Back to Haango</button></div></div></div>
       <div className="container-max section-pad py-8">
         {error && <p className="mb-6 rounded-2xl bg-error-50 p-4 text-sm text-error-600">{error}</p>}
         {loading ? <p className="text-ink-500">Loading live admin data...</p> : <>
           <div className="mb-8 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">{metrics.map(([label, value, Icon]) => <div key={label} className="card p-4"><Icon size={18} className="mb-3 text-coral-500" /><p className="font-display text-xl font-extrabold text-ink-900">{value ?? 0}</p><p className="text-xs text-ink-400">{label}</p></div>)}</div>
-          <section className="card mb-8 p-6"><div className="mb-4 flex items-center justify-between"><div><h2 className="font-display text-xl font-bold text-ink-900">Cancellation requests</h2><p className="text-sm text-ink-500">Requests submitted after the call unlock window.</p></div><span className="text-xs text-ink-400">{cancellationRequests.filter((item) => item.status === 'PENDING').length} pending</span></div>{cancellationRequests.length ? <div className="space-y-3">{cancellationRequests.map((request) => <div key={request._id} className="flex flex-wrap items-center gap-3 rounded-2xl bg-ink-50 p-4"><div className="min-w-0 flex-1"><p className="font-semibold text-ink-900">{request.reason} · {request.bookingId?.bookingId || 'Booking'}</p><p className="text-xs text-ink-500">{request.requesterId?.name || 'User'} · {request.details || 'No additional details'} · {request.status}</p></div>{request.status === 'PENDING' && <div className="flex gap-2"><button onClick={() => reviewCancellation(request, 'APPROVED')} className="rounded-xl bg-success-500 px-3 py-2 text-xs font-semibold text-white">Approve</button><button onClick={() => reviewCancellation(request, 'REJECTED')} className="rounded-xl bg-error-50 px-3 py-2 text-xs font-semibold text-error-600">Reject</button><button onClick={() => reviewCancellation(request, 'CANCELLED')} className="rounded-xl bg-ink-200 px-3 py-2 text-xs font-semibold text-ink-700">Cancel request</button></div>}</div>)}</div> : <p className="text-sm text-ink-500">No cancellation requests.</p>}</section>
+          {supportRequestOnly && (
+            <section className="card mb-8 p-6">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h2 className="font-display text-xl font-bold text-ink-900">Support tickets</h2>
+                  <p className="text-sm text-ink-500">Review user-submitted support requests and reply directly.</p>
+                </div>
+                <button onClick={() => onNavigate('/admin')} className="btn-ghost text-xs">Back to dashboard</button>
+              </div>
+              {supportRequests.length ? (
+                <div className="space-y-3">
+                  {supportRequests.map((request) => (
+                    <div key={request._id} className="rounded-2xl bg-ink-50 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-ink-900">{request.fullName} · {request.userType}</p>
+                          <p className="text-xs text-ink-500">{request.createdBy?.name || 'User'} · {request.createdBy?.email || 'No email'} · {request.status}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => resolveSupportRequest(request, 'IN_REVIEW')} className="rounded-xl bg-ink-200 px-3 py-2 text-xs font-semibold text-ink-700">In review</button>
+                          <button onClick={() => resolveSupportRequest(request, 'RESOLVED')} className="rounded-xl bg-success-500 px-3 py-2 text-xs font-semibold text-white">Resolve</button>
+                        </div>
+                      </div>
+                      <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-ink-700">{request.problemDescription}</p>
+                      {request.adminReply && <div className="mt-3 rounded-xl border border-ink-200 bg-white p-3 text-sm text-ink-700"><span className="font-semibold">Reply:</span> {request.adminReply}</div>}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-ink-500">No support requests found.</p>
+              )}
+            </section>
+          )}
+          {!supportRequestOnly && (
+            <section className="card mb-8 p-6"><div className="mb-4 flex items-center justify-between"><div><h2 className="font-display text-xl font-bold text-ink-900">Cancellation requests</h2><p className="text-sm text-ink-500">Requests submitted after the call unlock window.</p></div><span className="text-xs text-ink-400">{cancellationRequests.filter((item) => item.status === 'PENDING').length} pending</span></div>{cancellationRequests.length ? <div className="space-y-3">{cancellationRequests.map((request) => <div key={request._id} className="flex flex-wrap items-center gap-3 rounded-2xl bg-ink-50 p-4"><div className="min-w-0 flex-1"><p className="font-semibold text-ink-900">{request.reason} · {request.bookingId?.bookingId || 'Booking'}</p><p className="text-xs text-ink-500">{request.requesterId?.name || 'User'} · {request.details || 'No additional details'} · {request.status}</p></div>{request.status === 'PENDING' && <div className="flex gap-2"><button onClick={() => reviewCancellation(request, 'APPROVED')} className="rounded-xl bg-success-500 px-3 py-2 text-xs font-semibold text-white">Approve</button><button onClick={() => reviewCancellation(request, 'REJECTED')} className="rounded-xl bg-error-50 px-3 py-2 text-xs font-semibold text-error-600">Reject</button><button onClick={() => reviewCancellation(request, 'CANCELLED')} className="rounded-xl bg-ink-200 px-3 py-2 text-xs font-semibold text-ink-700">Cancel request</button></div>}</div>)}</div> : <p className="text-sm text-ink-500">No cancellation requests.</p>}</section>
+          )}
           <section className="card mb-8 p-6"><div className="mb-4 flex items-center justify-between"><div><h2 className="font-display text-xl font-bold text-ink-900">Website analytics</h2><p className="text-sm text-ink-500">Traffic and engagement tracked by Haango.</p></div><span className="text-xs text-ink-500">Today</span></div><div className="grid gap-3 sm:grid-cols-4"><div className="rounded-2xl bg-ink-50 p-4"><p className="text-2xl font-bold">{analytics.daily?.totalVisits || 0}</p><p className="text-xs text-ink-500">Page visits</p></div><div className="rounded-2xl bg-ink-50 p-4"><p className="text-2xl font-bold">{analytics.daily?.uniqueUsers || 0}</p><p className="text-xs text-ink-500">Unique visitors</p></div><div className="rounded-2xl bg-ink-50 p-4"><p className="text-2xl font-bold">{Math.round((analytics.daily?.totalTimeSpent || 0) / 60)}m</p><p className="text-xs text-ink-500">Time spent</p></div><div className="rounded-2xl bg-ink-50 p-4"><p className="text-2xl font-bold">{Math.round(analytics.daily?.avgTimePerVisit || 0)}s</p><p className="text-xs text-ink-500">Average visit</p></div></div><div className="mt-5 grid gap-6 md:grid-cols-2"><div><h3 className="mb-2 text-sm font-semibold">Last 7 days</h3>{analytics.trend.map((item) => <div key={item.date} className="flex justify-between border-b border-ink-100 py-2 text-sm"><span>{item.date}</span><span>{item.visits} visits · {Math.round(item.avgTimeSpent || 0)}s avg</span></div>)}</div><div><h3 className="mb-2 text-sm font-semibold">Popular pages</h3>{analytics.pages.map((item) => <div key={item.page} className="flex justify-between border-b border-ink-100 py-2 text-sm"><span className="truncate">{item.page}</span><span>{item.visits}</span></div>)}</div></div></section>
           <section className="card mb-8 p-6"><div className="mb-4 flex items-center justify-between"><div><h2 className="font-display text-xl font-bold text-ink-900">Admin audit log</h2><p className="text-sm text-ink-500">Append-only record of privileged operational decisions.</p></div><span className="text-xs text-ink-400">{auditLogs.length} recent</span></div>{auditLogs.length ? <div className="space-y-2">{auditLogs.map((log) => <div key={log._id} className="flex flex-wrap items-center gap-3 rounded-xl bg-ink-50 p-3 text-sm"><span className="font-semibold text-ink-900">{log.action}</span><span className="text-ink-500">{log.actorId?.name || log.actorRole} · {log.targetType}</span><time className="ml-auto text-xs text-ink-400">{new Date(log.createdAt).toLocaleString()}</time></div>)}</div> : <p className="text-sm text-ink-500">No audit entries yet.</p>}</section>
           <div className="grid gap-6 lg:grid-cols-3">

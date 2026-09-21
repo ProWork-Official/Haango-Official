@@ -9,6 +9,8 @@ import {
   Flag,
   MoreVertical,
   Phone,
+  PhoneCall,
+  PhoneOff,
   Send,
   Shield,
   X,
@@ -92,6 +94,25 @@ function renderUserAvatar(user, sizeClass) {
   );
 }
 
+function normalizeMessageList(list) {
+  const deduped = new Map();
+
+  for (const item of Array.isArray(list) ? list : []) {
+    if (!item || typeof item !== 'object') continue;
+
+    if (item.type === 'call-status') {
+      const key = `${item.callStatus || 'status'}:${item.callId || item._id || item.message || 'system'}`;
+      if (deduped.has(key)) continue;
+      deduped.set(key, item);
+      continue;
+    }
+
+    deduped.set(item._id || `${item.senderId}:${item.createdAt || Date.now()}:${item.message}`, item);
+  }
+
+  return [...deduped.values()].sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+}
+
 export default function MessagesPage({ activeConversationId, onNavigate, onBack }) {
   const { profile } = useAuth();
   const [conversations, setConversations] = useState([]);
@@ -120,6 +141,11 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
   const pendingIceCandidatesRef = useRef([]);
   const callTimerRef = useRef(null);
   const callTimeoutRef = useRef(null);
+  const activeIdRef = useRef(activeId);
+
+  useEffect(() => {
+    activeIdRef.current = activeId;
+  }, [activeId]);
 
   const active = conversations.find((conversation) => conversation.id === activeId);
 
@@ -250,6 +276,7 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
           socketRef.current.emit('call:timeout', {
             type: 'call:timeout',
             callId: callIdRef.current,
+            bookingId: active?.bookingId,
             fromUserId: profile.id,
             toUserId: peerInfo.id,
           });
@@ -263,6 +290,7 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
       socketRef.current?.emit('call:invite', {
         type: 'call:invite',
         callId,
+        bookingId: active?.bookingId,
         fromUserId: profile.id,
         toUserId: peerInfo.id,
         callerUser: {
@@ -306,6 +334,7 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
       socketRef.current?.emit('call:answer', {
         type: 'call:answer',
         callId: callIdRef.current,
+        bookingId: active?.bookingId,
         fromUserId: profile.id,
         toUserId: callPeer.id,
         answer: {
@@ -332,6 +361,7 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
       socketRef.current.emit('call:reject', {
         type: 'call:reject',
         callId: callIdRef.current,
+        bookingId: active?.bookingId,
         fromUserId: profile.id,
         toUserId: callPeer.id,
       });
@@ -349,6 +379,7 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
       socketRef.current.emit('call:end', {
         type: 'call:end',
         callId: callIdRef.current,
+        bookingId: active?.bookingId,
         fromUserId: profile.id,
         toUserId: callPeer.id,
         durationSeconds: callDuration,
@@ -360,27 +391,37 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
   };
 
   const addCallStatusMessage = (type) => {
-    const statusLabel = type === 'accepted' ? 'Call accepted' : 'Call rejected';
+    const statusLabel = type === 'accepted'
+      ? 'Call accepted'
+      : type === 'rejected'
+        ? 'Call rejected'
+        : type === 'missed'
+          ? 'Missed call'
+          : 'Call ended';
 
     setMessages((current) => {
-      if (current.some((message) => message?.type === 'call-status' && message?.callStatus === type)) {
-        return current;
+      const nextCurrent = normalizeMessageList(current);
+      const callKey = `${type}:${callIdRef.current || 'local'}`;
+      if (nextCurrent.some((message) => message?.type === 'call-status' && message?.callStatus === type && (message.callId || callKey) === callKey)) {
+        return nextCurrent;
       }
 
-      return [
-        ...current,
+      return normalizeMessageList([
+        ...nextCurrent,
         {
           _id: `call-status-${type}-${Date.now()}`,
           type: 'call-status',
           callStatus: type,
+          callId: callIdRef.current || `local-${Date.now()}`,
           message: statusLabel,
-          senderId: 'system',
-          receiverId: profile?.id || active?.otherUser?.id,
+          senderId: profile?.id || 'system',
+          receiverId: active?.otherUser?.id || profile?.id || 'system',
           createdAt: new Date().toISOString(),
+          isSystem: true,
           isRead: true,
           isDelivered: true,
         },
-      ];
+      ]);
     });
   };
 
@@ -452,6 +493,29 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
       setError('Unable to connect to the live call server. Please refresh and try again.');
     });
 
+    socket.on('message:new', (message) => {
+      if (!message || String(message.receiverId) !== String(profile.id)) return;
+
+      const bookingId = String(message.bookingId);
+      const isOpenConversation = String(activeIdRef.current) === bookingId;
+
+      setConversations((current) => current.map((conversation) => (
+        String(conversation.id) !== bookingId
+          ? conversation
+          : {
+            ...conversation,
+            lastMessage: message.message,
+            lastTime: message.createdAt,
+            unreadCount: isOpenConversation ? 0 : Number(conversation.unreadCount || 0) + 1,
+          }
+      )));
+
+      if (isOpenConversation) {
+        setMessages((current) => normalizeMessageList([...current, message]));
+        apiRequest(`/messages/${message._id}/read`, { method: 'PATCH' }).catch(() => {});
+      }
+    });
+
     socket.on('disconnect', () => {
       if (!callState || callState === 'idle') return;
       setError('Live call connection dropped. Please re-open the call.');
@@ -499,7 +563,9 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
       if (!payload || String(payload.toUserId) !== String(profile.id)) return;
       stopCallTone();
       playCallEndedTone();
-      addCallStatusMessage('rejected');
+      if (payload.callStatus || payload.reason) {
+        addCallStatusMessage(payload.callStatus || 'rejected');
+      }
       cleanupCallSession();
     });
 
@@ -507,6 +573,9 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
       if (!payload || String(payload.toUserId) !== String(profile.id)) return;
       stopCallTone();
       playCallEndedTone();
+      if (payload.callStatus || payload.reason) {
+        addCallStatusMessage(payload.callStatus || 'missed');
+      }
       cleanupCallSession();
     });
 
@@ -514,6 +583,9 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
       if (!payload || String(payload.toUserId) !== String(profile.id)) return;
       stopCallTone();
       playCallEndedTone();
+      if (payload.callStatus || payload.reason) {
+        addCallStatusMessage(payload.callStatus || 'ended');
+      }
       cleanupCallSession();
     });
 
@@ -581,7 +653,7 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
     apiRequest(`/messages/${activeId}`)
       .then((data) => {
         if (!mounted) return;
-        const nextMessages = Array.isArray(data) ? data : [];
+        const nextMessages = normalizeMessageList(Array.isArray(data) ? data : []);
         setMessages(nextMessages);
         nextMessages
           .filter((message) => String(message.receiverId) === String(profile?.id) && !message.isRead)
@@ -605,7 +677,7 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
     const refreshMessages = async () => {
       try {
         const latestMessages = await apiRequest(`/messages/${activeId}`);
-        if (activePolling && Array.isArray(latestMessages)) setMessages(latestMessages);
+        if (activePolling && Array.isArray(latestMessages)) setMessages(normalizeMessageList(latestMessages));
       } catch (_) {
         // keep current conversation visible if polling briefly fails
       }
@@ -617,6 +689,27 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
       window.clearInterval(interval);
     };
   }, [activeId]);
+
+  useEffect(() => {
+    let activePolling = true;
+
+    const refreshConversations = async () => {
+      try {
+        const latestConversations = await apiRequest('/messages/conversations');
+        if (activePolling && Array.isArray(latestConversations)) {
+          setConversations(latestConversations);
+        }
+      } catch (_) {
+        // keep the current conversation list visible if polling briefly fails
+      }
+    };
+
+    const interval = window.setInterval(refreshConversations, 5000);
+    return () => {
+      activePolling = false;
+      window.clearInterval(interval);
+    };
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -708,7 +801,12 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
       <>
         <div className="pt-16 md:pt-18 flex h-screen flex-col animate-fade-in">
           <div className="flex shrink-0 items-center gap-3 border-b border-ink-100 bg-white px-4 py-3">
-            <button onClick={() => { setActiveId(null); onBack(); }} className="p-1.5 hover:bg-ink-100 md:hidden">
+            <button
+              type="button"
+              onClick={() => setActiveId(null)}
+              className="inline-flex items-center justify-center rounded-full p-1.5 hover:bg-ink-100"
+              aria-label="Back to messages"
+            >
               <ArrowLeft size={20} />
             </button>
             <div className="shrink-0">{renderUserAvatar(active.otherUser, 'h-10 w-10')}</div>
@@ -746,9 +844,18 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
 
                 if (message?.type === 'call-status') {
                   const isAccepted = message.callStatus === 'accepted';
+                  const isMissed = message.callStatus === 'missed';
+                  const isEnded = message.callStatus === 'ended';
+                  const statusClasses = isAccepted
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                    : isMissed || isEnded
+                      ? 'border-amber-200 bg-amber-50 text-amber-700'
+                      : 'border-red-200 bg-red-50 text-red-700';
+
                   return (
                     <div key={message._id} className="flex justify-center">
-                      <div className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-medium ${isAccepted ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700'}`}>
+                      <div className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium ${statusClasses}`}>
+                        {isAccepted ? <PhoneCall size={12} /> : isMissed ? <PhoneOff size={12} /> : <PhoneOff size={12} />}
                         {message.message}
                       </div>
                     </div>
@@ -833,19 +940,38 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
         {conversations.length ? (
           <div className="space-y-2">
             {conversations.map((conversation) => (
+              (() => {
+                const isUnread = Number(conversation.unreadCount || 0) > 0;
+
+                return (
               <button
                 key={conversation.id}
                 onClick={() => setActiveId(conversation.id)}
-                className="flex w-full items-center gap-4 rounded-3xl bg-white p-4 text-left hover:bg-ink-50"
+                className={`flex w-full items-center gap-4 rounded-3xl border p-4 text-left transition ${isUnread ? 'border-coral-200 bg-coral-50/60 shadow-sm hover:bg-coral-50' : 'border-transparent bg-white hover:bg-ink-50'}`}
               >
                 <div className="shrink-0">{renderUserAvatar(conversation.otherUser, 'h-14 w-14')}</div>
                 <div className="min-w-0 flex-1">
-                  <p className="font-display font-semibold text-ink-900">{conversation.otherUser.name}</p>
+                  <p className={`font-display text-ink-900 ${isUnread ? 'font-extrabold' : 'font-semibold'}`}>{conversation.otherUser.name}</p>
                   <p className="text-xs text-coral-500">{conversation.bookingContext}</p>
-                  <p className="truncate text-sm text-ink-500">{conversation.lastMessage || 'Start the conversation'}</p>
+                  <p className={`truncate text-sm ${isUnread ? 'font-semibold text-ink-800' : 'text-ink-500'}`}>{conversation.lastMessage || 'Start the conversation'}</p>
                 </div>
-                <span className="text-xs text-ink-400">{formatTime(conversation.lastTime)}</span>
+                <div className="flex flex-col items-end gap-1">
+                  <span className={`text-xs ${isUnread ? 'font-semibold text-coral-600' : 'text-ink-400'}`}>{formatTime(conversation.lastTime)}</span>
+                  {isUnread && (
+                    <span className="min-w-5 rounded-full bg-coral-500 px-1.5 py-0.5 text-center text-[10px] font-bold text-white">
+                      {conversation.unreadCount > 99 ? '99+' : conversation.unreadCount}
+                    </span>
+                  )}
+                  {conversation.lastMessage && /call|missed|accepted|rejected/i.test(conversation.lastMessage) && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-ink-100 px-2 py-0.5 text-[10px] font-medium text-ink-600">
+                      <PhoneCall size={10} />
+                      {conversation.lastMessage}
+                    </span>
+                  )}
+                </div>
               </button>
+                );
+              })()
             ))}
           </div>
         ) : (
