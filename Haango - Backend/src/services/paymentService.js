@@ -8,6 +8,7 @@ import { ensureCustomerWallet, debitWallet, creditWallet } from './customerWalle
 import { rewardReferrerForFirstBooking } from './referralService.js';
 import User from '../models/User.js';
 import { redeemCoupon } from './couponService.js';
+import { createNotification } from './notificationService.js';
 
 const INDIA_OFFSET_MINUTES = 330;
 
@@ -62,6 +63,18 @@ export async function createOrder(booking) {
     await booking.save();
     if (booking.couponCode) await redeemCoupon(booking.couponCode, await User.findById(booking.customerId), 'BOOKING', { bookingId: booking._id, totalAmount: booking.totalAmount });
     await rewardReferrerForFirstBooking(booking);
+    const customer = await User.findById(booking.customerId).select('name').lean();
+    await createNotification(
+      booking.buddyId,
+      'BOOKING_CONFIRMED',
+      'Paid booking confirmed',
+      `${customer?.name || 'A customer'} confirmed and paid for the booking on Haango.`,
+      {
+        bookingId: String(booking._id),
+        customerId: String(booking.customerId),
+        paymentStatus: 'PAID',
+      }
+    );
     return { walletOnly: true, amount: 0, currency: 'INR', booking };
   }
 
@@ -140,6 +153,18 @@ export async function verifyPayment(paymentData, customerId) {
   await booking.save();
   if (booking.couponCode) await redeemCoupon(booking.couponCode, await User.findById(booking.customerId), 'BOOKING', { bookingId: booking._id, totalAmount: booking.totalAmount });
   await rewardReferrerForFirstBooking(booking);
+  const customer = await User.findById(booking.customerId).select('name').lean();
+  await createNotification(
+    booking.buddyId,
+    'BOOKING_CONFIRMED',
+    'Paid booking confirmed',
+    `${customer?.name || 'A customer'} confirmed and paid for the booking on Haango.`,
+    {
+      bookingId: String(booking._id),
+      customerId: String(booking.customerId),
+      paymentStatus: 'PAID',
+    }
+  );
   return booking;
 }
 
@@ -191,6 +216,18 @@ export async function handleWebhook(body, signature, rawBody) {
     }
     if (booking.couponCode) await redeemCoupon(booking.couponCode, await User.findById(booking.customerId), 'BOOKING', { bookingId: booking._id, totalAmount: booking.totalAmount });
     await rewardReferrerForFirstBooking(booking);
+    const customer = await User.findById(booking.customerId).select('name').lean();
+    await createNotification(
+      booking.buddyId,
+      'BOOKING_CONFIRMED',
+      'Paid booking confirmed',
+      `${customer?.name || 'A customer'} confirmed and paid for the booking on Haango.`,
+      {
+        bookingId: String(booking._id),
+        customerId: String(booking.customerId),
+        paymentStatus: 'PAID',
+      }
+    );
   } else if (event === 'payment.failed') {
     booking.paymentStatus = 'FAILED';
   } else if (event === 'refund.processed') {

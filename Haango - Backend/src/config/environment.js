@@ -55,6 +55,9 @@ export const env = {
   razorpayXWebhookSecret: process.env.RAZORPAYX_WEBHOOK_SECRET || '',
 
   platformFeePercentage: parseFloat(process.env.PLATFORM_FEE_PERCENTAGE || '3'),
+  vapidSubject: process.env.VAPID_SUBJECT || 'mailto:support@haango.in',
+  vapidPublicKey: process.env.VAPID_PUBLIC_KEY || '',
+  vapidPrivateKey: process.env.VAPID_PRIVATE_KEY || '',
   minBookingDuration: parseInt(process.env.MIN_BOOKING_DURATION || '1', 10),
   maxBookingDuration: parseInt(process.env.MAX_BOOKING_DURATION || '8', 10),
 };

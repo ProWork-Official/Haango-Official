@@ -8,6 +8,8 @@ import { ensureBootstrapAdminUsers } from './services/authService.js';
 import { purgeExpiredBookingLocations } from './services/bookingService.js';
 import User from './models/User.js';
 import CallLog from './models/CallLog.js';
+import Message from './models/Message.js';
+import { registerRealtime } from './utils/realtime.js';
 
 const httpServer = http.createServer(app);
 const io = new Server(httpServer, {
@@ -16,6 +18,7 @@ const io = new Server(httpServer, {
     credentials: true,
   },
 });
+registerRealtime(io);
 
 const CALL_TIMEOUT_MS = 30_000;
 const activeCalls = new Map();
@@ -41,6 +44,43 @@ async function persistCallLog(callId, patch = {}) {
   } catch (error) {
     console.error('Call log save failed:', error.message);
   }
+}
+
+const CALL_STATUS_TEXT = {
+  accepted: 'Call accepted',
+  rejected: 'Call rejected',
+  missed: 'Missed call',
+  ended: 'Call ended',
+};
+
+async function createConversationCallStatusMessage({ bookingId, callId, fromUserId, toUserId, status }) {
+  const safeBookingId = normalizeUserId(bookingId);
+  const safeCallId = normalizeUserId(callId);
+  const safeFromUserId = normalizeUserId(fromUserId);
+  const safeToUserId = normalizeUserId(toUserId);
+
+  if (!safeBookingId || !safeFromUserId || !safeToUserId || !status) return null;
+
+  const messageText = CALL_STATUS_TEXT[status] || 'Call update';
+  const query = { bookingId: safeBookingId, type: 'call-status', callStatus: status };
+  if (safeCallId) query.callId = safeCallId;
+
+  const existing = await Message.findOne(query).lean();
+  if (existing) return existing;
+
+  return Message.create({
+    conversationId: `conv_${safeBookingId}`,
+    bookingId: safeBookingId,
+    senderId: safeFromUserId,
+    receiverId: safeToUserId,
+    message: messageText,
+    type: 'call-status',
+    callStatus: status,
+    isSystem: true,
+    callId: safeCallId,
+    isDelivered: true,
+    isRead: false,
+  });
 }
 
 function emitCallEvent(eventName, payload) {
@@ -93,6 +133,7 @@ io.on('connection', (socket) => {
     const callId = payload?.callId || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const callRecord = {
       callId,
+      bookingId: normalizeUserId(payload?.bookingId),
       fromUserId,
       toUserId,
       callerUser: payload?.callerUser || { id: fromUserId, name: 'Caller' },
@@ -113,6 +154,7 @@ io.on('connection', (socket) => {
     emitCallEvent('call:invite', {
       ...payload,
       callId,
+      bookingId: callRecord.bookingId,
       fromUserId,
       toUserId,
       callerUser: payload?.callerUser || { id: fromUserId, name: 'Caller' },
@@ -151,6 +193,15 @@ io.on('connection', (socket) => {
       liveCall.status = 'ACCEPTED';
     }
 
+    const bookingId = normalizeUserId(payload?.bookingId) || liveCall?.bookingId;
+    await createConversationCallStatusMessage({
+      bookingId,
+      callId,
+      fromUserId,
+      toUserId,
+      status: 'accepted',
+    });
+
     await persistCallLog(callId, {
       callerId: liveCall?.fromUserId || fromUserId,
       receiverId: liveCall?.toUserId || toUserId,
@@ -159,7 +210,7 @@ io.on('connection', (socket) => {
       reason: 'Call accepted',
     });
 
-    emitCallEvent('call:answer', payload);
+    emitCallEvent('call:answer', { ...payload, bookingId, callStatus: 'accepted' });
   });
 
   socket.on('call:reject', async (payload) => {
@@ -173,6 +224,15 @@ io.on('connection', (socket) => {
       activeCalls.delete(callId);
     }
 
+    const bookingId = normalizeUserId(payload?.bookingId) || liveCall?.bookingId;
+    await createConversationCallStatusMessage({
+      bookingId,
+      callId,
+      fromUserId,
+      toUserId,
+      status: 'rejected',
+    });
+
     await persistCallLog(callId, {
       callerId: liveCall?.fromUserId || toUserId,
       receiverId: liveCall?.toUserId || fromUserId,
@@ -181,7 +241,7 @@ io.on('connection', (socket) => {
       reason: 'Call rejected',
     });
 
-    emitCallEvent('call:reject', payload);
+    emitCallEvent('call:reject', { ...payload, bookingId, callStatus: 'rejected' });
   });
 
   socket.on('call:end', async (payload) => {
@@ -195,6 +255,15 @@ io.on('connection', (socket) => {
       activeCalls.delete(callId);
     }
 
+    const bookingId = normalizeUserId(payload?.bookingId) || liveCall?.bookingId;
+    await createConversationCallStatusMessage({
+      bookingId,
+      callId,
+      fromUserId,
+      toUserId,
+      status: 'ended',
+    });
+
     await persistCallLog(callId, {
       callerId: liveCall?.fromUserId || toUserId,
       receiverId: liveCall?.toUserId || fromUserId,
@@ -204,7 +273,7 @@ io.on('connection', (socket) => {
       reason: 'Call ended',
     });
 
-    emitCallEvent('call:end', payload);
+    emitCallEvent('call:end', { ...payload, bookingId, callStatus: 'ended' });
   });
 
   socket.on('call:timeout', async (payload) => {
@@ -218,6 +287,15 @@ io.on('connection', (socket) => {
       activeCalls.delete(callId);
     }
 
+    const bookingId = normalizeUserId(payload?.bookingId) || liveCall?.bookingId;
+    await createConversationCallStatusMessage({
+      bookingId,
+      callId,
+      fromUserId,
+      toUserId,
+      status: 'missed',
+    });
+
     await persistCallLog(callId, {
       callerId: liveCall?.fromUserId || fromUserId,
       receiverId: liveCall?.toUserId || toUserId,
@@ -228,9 +306,11 @@ io.on('connection', (socket) => {
 
     emitCallEvent('call:missed', {
       callId,
+      bookingId,
       fromUserId,
       toUserId,
       reason: 'Call timed out',
+      callStatus: 'missed',
     });
   });
 

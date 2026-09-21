@@ -1,6 +1,9 @@
 import Message from '../models/Message.js';
 import Booking from '../models/Booking.js';
 import BlockedUser from '../models/BlockedUser.js';
+import User from '../models/User.js';
+import { createNotification } from './notificationService.js';
+import { emitToUser } from '../utils/realtime.js';
 import { notFound, forbidden, badRequest } from '../utils/errors.js';
 
 function sanitizeMessage(text) {
@@ -45,7 +48,7 @@ export async function getConversationMessages(bookingId, userId) {
   return Message.find({ bookingId }).sort({ createdAt: 1 });
 }
 
-export async function sendMessage(bookingId, senderId, text) {
+export async function sendMessage(bookingId, senderId, text, options = {}) {
   const booking = await Booking.findById(bookingId);
   if (!booking) throw notFound('Booking not found');
 
@@ -60,8 +63,14 @@ export async function sendMessage(bookingId, senderId, text) {
 
   assertPaidBooking(booking);
   await assertNotBlocked(senderId, receiverId);
-  const sanitizedMessage = sanitizeMessage(text);
-  if (!sanitizedMessage) throw badRequest('Message contains no allowed content', 'EMPTY_MESSAGE');
+
+  const normalizedType = options.type === 'call-status' ? 'call-status' : 'text';
+  const messageText = String(options.message || text || '').trim();
+  const safeMessage = normalizedType === 'call-status'
+    ? (messageText || options.label || 'Call update')
+    : sanitizeMessage(messageText);
+
+  if (!safeMessage) throw badRequest('Message contains no allowed content', 'EMPTY_MESSAGE');
 
   const conversationId = `conv_${bookingId}`;
   const message = await Message.create({
@@ -69,10 +78,36 @@ export async function sendMessage(bookingId, senderId, text) {
     bookingId,
     senderId,
     receiverId,
-    message: sanitizedMessage,
+    message: safeMessage,
+    type: normalizedType,
+    callStatus: normalizedType === 'call-status' ? (options.callStatus || null) : null,
+    isSystem: Boolean(options.isSystem || normalizedType === 'call-status'),
+    callId: options.callId || null,
     isDelivered: true,
     isRead: false,
   });
+
+  const messagePayload = message.toObject();
+  emitToUser(receiverId, 'message:new', messagePayload);
+
+  try {
+    const sender = await User.findById(senderId).select('name').lean();
+    const senderName = sender?.name || 'Someone';
+
+    await createNotification(
+      receiverId,
+      'NEW_MESSAGE',
+      'New message',
+      `${senderName} sent you a new message on Haango.`,
+      {
+        bookingId: String(bookingId),
+        senderId: String(senderId),
+        messageId: String(message._id),
+      }
+    );
+  } catch (notificationError) {
+    console.error('Message notification failed:', notificationError.message);
+  }
 
   return message;
 }
