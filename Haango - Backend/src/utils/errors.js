@@ -16,8 +16,8 @@ export function forbidden(message = 'You do not have permission to perform this 
   return new AppError(message, 403, 'FORBIDDEN');
 }
 
-export function unauthorized(message = 'Authentication required') {
-  return new AppError(message, 401, 'UNAUTHORIZED');
+export function unauthorized(message = 'Authentication required', errorCode = 'UNAUTHORIZED') {
+  return new AppError(message, 401, errorCode);
 }
 
 export function badRequest(message = 'Invalid request', errorCode = 'BAD_REQUEST') {

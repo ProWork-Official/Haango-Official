@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import * as bookingController from '../controllers/bookingController.js';
-import { requireAuth, requireBookingUser, requireBuddy, requireAdmin } from '../middleware/auth.js';
+import { requireAuth, requireBookingUser, requireCustomer, requireBuddy, requireAdmin } from '../middleware/auth.js';
 import { handleValidationErrors } from '../middleware/validate.js';
 import { createBookingValidator } from '../validators/index.js';
 import rateLimit from 'express-rate-limit';
@@ -15,10 +15,13 @@ const locationLimiter = rateLimit({
 });
 
 router.post('/', requireAuth, requireBookingUser, createBookingValidator, handleValidationErrors, bookingController.createBooking);
+router.get('/payu/return', bookingController.payuReturn);
+router.post('/payu/return', bookingController.payuReturn);
 router.get('/my-bookings', requireAuth, requireBookingUser, bookingController.getMyBookings);
 router.get('/buddy', requireAuth, requireBuddy, bookingController.getBuddyBookings);
 router.get('/admin/all', requireAuth, requireAdmin, bookingController.adminGetAllBookings);
 router.get('/:id', requireAuth, bookingController.getBookingById);
+router.delete('/:id/payment-pending', requireAuth, requireCustomer, bookingController.clearPendingPaymentBooking);
 router.patch('/:id/cancel', requireAuth, bookingController.cancelBooking);
 router.post('/:id/cancellation-request', requireAuth, requireBookingUser, bookingController.requestCancellation);
 router.post('/:id/meeting/otp', requireAuth, requireBookingUser, bookingController.issueMeetingOtp);

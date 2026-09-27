@@ -14,18 +14,18 @@ export async function requireAuth(req, _res, next) {
       : (headerToken || cookieToken || queryToken);
 
     if (!token) {
-      throw unauthorized('Authentication required');
+      throw unauthorized('Authentication required', 'AUTH_TOKEN_MISSING');
     }
 
     let decoded;
     try {
       decoded = jwt.verify(token, env.jwtSecret);
     } catch {
-      throw unauthorized('Invalid or expired token');
+      throw unauthorized('Invalid or expired token', 'AUTH_TOKEN_INVALID');
     }
 
     const user = await User.findById(decoded.userId);
-    if (!user) throw unauthorized('User not found');
+    if (!user) throw unauthorized('User not found', 'AUTH_USER_NOT_FOUND');
     if (!user.isActive) throw forbidden('Account suspended');
 
     user.lastSeenAt = new Date();

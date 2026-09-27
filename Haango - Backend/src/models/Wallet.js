@@ -9,9 +9,6 @@ const walletSchema = new mongoose.Schema(
     accountNumber: { type: String, trim: true, select: false, default: '' },
     ifscCode: { type: String, trim: true, uppercase: true, maxlength: 11, default: '' },
     upiId: { type: String, trim: true, maxlength: 120, default: '' },
-    razorpayXContactId: { type: String, trim: true, default: '' },
-    razorpayXBankFundAccountId: { type: String, trim: true, default: '' },
-    razorpayXUpiFundAccountId: { type: String, trim: true, default: '' },
     isVerified: { type: Boolean, default: false },
   },
   { timestamps: true }

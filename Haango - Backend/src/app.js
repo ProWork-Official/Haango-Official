@@ -18,7 +18,6 @@ import supportRequestRoutes from './routes/supportRequestRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import pushSubscriptionRoutes from './routes/pushSubscriptionRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
-import paymentRoutes from './routes/paymentRoutes.js';
 import profileRoutes from './routes/profileRoutes.js';
 import buddyRoutes from './routes/buddyRoutes.js';
 import walletRoutes from './routes/walletRoutes.js';
@@ -57,15 +56,8 @@ app.use(
   })
 );
 
-// razorpay test card 4100 2800 0000 1007
-
-app.use(express.json({
-  limit: '50mb',
-  verify: (req, _res, buffer) => {
-    req.rawBody = buffer.toString();
-  },
-}));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: false, limit: '20kb' }));
 app.use(cookieParser());
 
 if (env.nodeEnv !== 'test') {
@@ -85,6 +77,13 @@ app.get('/api/health', (_req, res) => {
     service: 'Haango API',
     status: 'healthy',
     database: getDbStatus(),
+    runtime: {
+      environment: env.nodeEnv,
+      clientUrl: env.clientUrl,
+      cookieSecure: env.cookieSecure,
+      cookieSameSite: env.cookieSameSite,
+      corsOriginCount: env.corsOrigins.length,
+    },
   });
 });
 
@@ -108,7 +107,6 @@ app.use('/api/support-requests', supportRequestRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/push-subscriptions', pushSubscriptionRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/payments', paymentRoutes);
 app.use('/api/wallet', walletRoutes);
 app.use('/api/bonuses', bonusRoutes);
 app.use('/api/customer-wallet', customerWalletRoutes);

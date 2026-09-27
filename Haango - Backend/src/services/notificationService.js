@@ -11,10 +11,11 @@ if (pushConfigured) {
   webpush.setVapidDetails(env.vapidSubject, env.vapidPublicKey, env.vapidPrivateKey);
 }
 
-async function sendWebPush(userId, notification) {
-  if (!pushConfigured) return;
+export async function sendWebPush(userId, notification) {
+  if (!pushConfigured) return { configured: false, subscriptions: 0, delivered: 0 };
 
   const subscriptions = await PushSubscription.find({ userId }).lean();
+  let delivered = 0;
   const payload = JSON.stringify({
     title: notification.title,
     body: notification.message,
@@ -32,6 +33,7 @@ async function sendWebPush(userId, notification) {
         },
         payload
       );
+      delivered += 1;
     } catch (error) {
       if ([404, 410].includes(error.statusCode)) {
         await PushSubscription.deleteOne({ _id: subscription._id });
@@ -40,6 +42,8 @@ async function sendWebPush(userId, notification) {
       }
     }
   }));
+
+  return { configured: true, subscriptions: subscriptions.length, delivered };
 }
 
 export async function getUserNotifications(userId, page = 1, limit = 20) {

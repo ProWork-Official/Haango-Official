@@ -373,3 +373,305 @@ export async function sendPasswordResetEmail(
     queued: true,
   };
 }
+
+function escapeHtml(value) {
+  return String(value || '').replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[character]);
+}
+
+function formatBookingDate(value) {
+  return new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date(value));
+}
+
+
+export async function sendBookingConfirmationEmails({
+  customer,
+  buddy,
+  activity,
+  booking,
+}) {
+  const clientOrigin = env.clientUrl.replace(/\/+$/, '');
+
+  const details = {
+    activity:
+      activity ||
+      String(booking.activitySlug || 'Haango booking').replace(/[-_]/g, ' '),
+
+    date: formatBookingDate(booking.date),
+
+    startTime: booking.startTime,
+
+    duration: `${booking.duration} ${
+      Number(booking.duration) === 1 ? 'hour' : 'hours'
+    }`,
+
+    location: booking.meetingLocation,
+  };
+
+  const sendConfirmation = async ({
+    recipient,
+    recipientName,
+    otherName,
+    isBuddy,
+  }) => {
+    if (!recipient) return;
+
+    const title = isBuddy
+      ? 'You have a new booking'
+      : 'Your booking is confirmed';
+
+    const description = isBuddy
+      ? `${otherName} booked you for ${details.activity}.`
+      : `Your booking with ${otherName} is confirmed.`;
+
+    const buttonLabel = isBuddy
+      ? 'View buddy bookings'
+      : 'View my bookings';
+
+    const bookingUrl = `${clientOrigin}/${
+      isBuddy ? 'buddy-bookings' : 'bookings'
+    }`;
+
+    const safe = Object.fromEntries(
+      Object.entries({
+        title,
+        greeting: `Hello ${recipientName || 'there'},`,
+        description,
+        activity: details.activity,
+        date: details.date,
+        startTime: details.startTime,
+        duration: details.duration,
+        location: details.location,
+        buttonLabel,
+        bookingUrl,
+      }).map(([key, value]) => [key, escapeHtml(value)])
+    );
+
+    const subject = isBuddy
+      ? `New Haango booking: ${details.activity}`
+      : `Haango booking confirmed: ${details.activity}`;
+
+    const text = `
+${safe.greeting}
+
+${safe.description}
+
+Activity: ${safe.activity}
+Date: ${safe.date}
+Time: ${safe.startTime}
+Duration: ${safe.duration}
+Meeting place: ${safe.location}
+
+View booking: ${bookingUrl}
+
+Regards,
+Haango
+`.trim();
+
+    const html = `
+      <div style="
+        margin:0;
+        padding:40px 16px;
+        background:#f6f8fb;
+        font-family:Arial,Helvetica,sans-serif;
+      ">
+        <div style="
+          max-width:520px;
+          margin:0 auto;
+          background:#fff;
+          border:1px solid #e8edf3;
+          border-radius:16px;
+          overflow:hidden;
+        ">
+
+          <!-- Logo -->
+          <div style="
+            padding:30px 24px 12px;
+            text-align:center;
+          ">
+            <img
+              src="cid:haango-logo"
+              alt="Haango"
+              width="140"
+              style="
+                display:block;
+                width:140px;
+                max-width:70%;
+                height:auto;
+                margin:0 auto;
+              "
+            />
+          </div>
+
+          <!-- Content -->
+          <div style="
+            padding:12px 32px 32px;
+            color:#344054;
+          ">
+
+            <h1 style="
+              margin:0 0 12px;
+              color:#102038;
+              font-size:24px;
+              line-height:32px;
+            ">
+              ${safe.title}
+            </h1>
+
+            <p style="
+              margin:0 0 20px;
+              color:#667085;
+              line-height:1.6;
+            ">
+              ${safe.greeting}<br />
+              ${safe.description}
+            </p>
+
+            <!-- Booking Details -->
+            <div style="
+              padding:16px;
+              border:1px solid #e8edf3;
+              border-radius:12px;
+              background:#fafbfc;
+              line-height:1.8;
+            ">
+              <strong>${safe.activity}</strong><br />
+              ${safe.date} at ${safe.startTime}<br />
+              ${safe.duration}<br />
+              Meeting place: ${safe.location}
+            </div>
+
+            <!-- Button -->
+            <p style="
+              margin:24px 0;
+              text-align:center;
+            ">
+              <a
+                href="${safe.bookingUrl}"
+                style="
+                  display:inline-block;
+                  padding:13px 22px;
+                  border-radius:8px;
+                  background:#ff7418;
+                  color:#fff;
+                  text-decoration:none;
+                  font-weight:700;
+                "
+              >
+                ${safe.buttonLabel}
+              </a>
+            </p>
+
+            <!-- Fallback Link -->
+            <p style="
+              margin:0;
+              color:#98a2b3;
+              font-size:12px;
+              line-height:1.6;
+            ">
+              If the button does not open, use this link:
+              <br />
+
+              <a
+                href="${safe.bookingUrl}"
+                style="color:#ff7418;"
+              >
+                ${safe.bookingUrl}
+              </a>
+            </p>
+
+          </div>
+
+          <!-- Footer -->
+          <div style="
+            padding:18px 24px;
+            background:#fafbfc;
+            border-top:1px solid #edf0f4;
+            text-align:center;
+          ">
+            <p style="
+              margin:0;
+              color:#98a2b3;
+              font-size:11px;
+            ">
+              © ${new Date().getFullYear()} Haango. All rights reserved.
+            </p>
+          </div>
+
+        </div>
+      </div>
+    `;
+
+    /*
+     * Explicitly use the SMTP configuration from .env.
+     *
+     * SMTP_HOST=smtp.hostinger.com
+     * SMTP_PORT=465
+     * SMTP_USER=support@haango.in
+     * SMTP_PASS=...
+     * SMTP_FROM=support@haango.in
+     * SMTP_FROM_NAME=Haango
+     */
+    const transporter = createTransporter();
+
+    await transporter.sendMail({
+      from: `${env.smtpFromName} <${env.smtpFrom}>`,
+      to: recipient,
+      subject,
+      text,
+      html,
+      attachments: [
+        {
+          filename: 'haango-logo.png',
+          path: logoPath,
+          cid: 'haango-logo',
+        },
+      ],
+    });
+  };
+
+  const results = await Promise.allSettled([
+    // Email to buddy
+    sendConfirmation({
+      recipient: buddy?.email,
+      recipientName: buddy?.name,
+      otherName: customer?.name || 'A customer',
+      isBuddy: true,
+    }),
+
+    // Email to customer
+    sendConfirmation({
+      recipient: customer?.email,
+      recipientName: customer?.name,
+      otherName: buddy?.name || 'your buddy',
+      isBuddy: false,
+    }),
+  ]);
+
+  const failures = results.filter(
+    (result) => result.status === 'rejected'
+  );
+
+  if (failures.length) {
+    throw new AggregateError(
+      failures.map((failure) => failure.reason),
+      'One or more booking confirmation emails failed.'
+    );
+  }
+
+  return {
+    queued: true,
+  };
+}
+

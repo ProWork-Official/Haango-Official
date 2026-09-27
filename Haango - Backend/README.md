@@ -59,13 +59,12 @@ cp .env.example .env
 | `JWT_SECRET` | Secret for signing JWT tokens |
 | `JWT_EXPIRES_IN` | Token expiry (default 7d) |
 | `CLIENT_URL` | Frontend origin for CORS |
-| `RAZORPAY_KEY_ID` | Razorpay key (leave empty if not configured) |
-| `RAZORPAY_KEY_SECRET` | Razorpay secret |
-| `RAZORPAYX_KEY_ID` | RazorpayX payout API key |
-| `RAZORPAYX_KEY_SECRET` | RazorpayX payout API secret |
-| `RAZORPAYX_ACCOUNT_NUMBER` | RazorpayX business account number used to fund payouts |
-| `RAZORPAYX_WEBHOOK_SECRET` | Secret used to verify RazorpayX payout webhooks |
 | `PLATFORM_FEE_PERCENTAGE` | Customer-facing Haango fee % (default 3) |
+| `PAYU_KEY` | PayU hosted-checkout merchant key |
+| `PAYU_SALT` | PayU hosted-checkout salt; keep secret and never expose to the frontend |
+| `PAYU_MODE` | `test` (default) or `production` |
+| `API_PUBLIC_URL` | Public backend origin PayU can reach for payment return POSTs |
+| `BOOKING_PAYMENT_EXPIRY_MINUTES` | Time before an unpaid checkout slot expires (default 15) |
 | `MIN_BOOKING_DURATION` | Minimum hours (default 1) |
 | `MAX_BOOKING_DURATION` | Maximum hours (default 8) |
 | `VAPID_SUBJECT` | Contact URI used for browser push, for example `mailto:support@haango.in` |
@@ -82,6 +81,12 @@ npx web-push generate-vapid-keys
 ```
 
 Copy the generated keys into `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` in the backend environment. Do not regenerate these keys on every restart, or existing Chrome subscriptions will stop working.
+
+## PayU Booking Payments
+
+Set `PAYU_KEY`, `PAYU_SALT`, and `PAYU_MODE=test` in the backend environment and set `CLIENT_URL` to the frontend origin. PayU's `surl` and `furl` point to `/booking?buddyId=<buddy-profile-id>` on that origin. The Vite development middleware forwards PayU's form POST to the backend payment verifier and relays its redirect back to the browser. In production, configure the frontend host or reverse proxy to forward POST requests to `/booking` to the backend `/api/bookings/payu/return` handler while allowing normal GET requests to serve the frontend. Switch to `PAYU_MODE=production` only after PayU has enabled the merchant account for live collections.
+
+The backend creates and signs the hosted-checkout request, verifies PayU's response hash before accepting payment, and records payment details on the booking. Customers pay the buddy fee plus the configured Haango fee. Buddy earnings are calculated as 80% of the buddy fee and become eligible only after the booking's end OTP is verified; the remaining 20% of the buddy fee and the full Haango fee stay with Haango. The Client ID and Client Secret are not needed for this hosted-checkout flow and must remain server-side if used for separate PayU APIs.
 
 ## Running Locally
 
@@ -181,20 +186,12 @@ Creates demo data: 8 activities, 10 customers, 6 buddies, 5 bookings, 5 reviews,
 | PATCH | `/api/admin/buddies/:id/suspend` | ADMIN | Suspend buddy |
 | PATCH | `/api/admin/users/:id/suspend` | ADMIN | Suspend user |
 
-### Payments
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| POST | `/api/payments/create-order` | CUSTOMER | Create Razorpay order |
-| POST | `/api/payments/verify` | CUSTOMER | Verify payment |
-| POST | `/api/payments/webhook` | Public | Razorpay webhook |
-
-### Companion Wallet and Automatic Payouts
+### Companion Wallet and Withdrawals
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | GET | `/api/wallet` | BUDDY | Wallet balance, payout details, and withdrawal history |
 | PUT | `/api/wallet/payout-details` | BUDDY | Save bank account or UPI payout details |
-| POST | `/api/wallet/withdrawals` | BUDDY | Create an automatic RazorpayX payout |
-| POST | `/api/wallet/webhook` | Public | Receive signed RazorpayX payout status events |
+| POST | `/api/wallet/withdrawals` | BUDDY | Request a withdrawal for admin processing |
 | GET | `/api/admin/withdrawals` | ADMIN | View payout requests |
 | PATCH | `/api/admin/withdrawals/:id` | ADMIN | Manually override a payout status if needed |
 

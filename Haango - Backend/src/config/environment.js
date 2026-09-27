@@ -35,6 +35,7 @@ export const env = {
 
   clientUrl,
   corsOrigins,
+  apiPublicUrl: (process.env.API_PUBLIC_URL || `http://localhost:${process.env.PORT || '5000'}`).replace(/\/$/, ''),
 
   smtpHost: process.env.SMTP_HOST || '',
   smtpPort: getNumber('SMTP_PORT', 587),
@@ -47,14 +48,13 @@ export const env = {
   hostingerMailApiToken: process.env.HOSTINGER_MAIL_API_TOKEN || '',
   hostingerMailbox: process.env.HOSTINGER_MAILBOX || process.env.SMTP_USER || '',
 
-  razorpayKeyId: process.env.RAZORPAY_KEY_ID || '',
-  razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET || '',
-  razorpayXKeyId: process.env.RAZORPAYX_KEY_ID || '',
-  razorpayXKeySecret: process.env.RAZORPAYX_KEY_SECRET || '',
-  razorpayXAccountNumber: process.env.RAZORPAYX_ACCOUNT_NUMBER || '',
-  razorpayXWebhookSecret: process.env.RAZORPAYX_WEBHOOK_SECRET || '',
-
   platformFeePercentage: parseFloat(process.env.PLATFORM_FEE_PERCENTAGE || '3'),
+  payuKey: process.env.PAYU_KEY || '',
+  payuSalt: process.env.PAYU_SALT || '',
+  payuClientId: process.env.PAYU_CLIENT_ID || '',
+  payuClientSecret: process.env.PAYU_CLIENT_SECRET || '',
+  payuMode: process.env.PAYU_MODE || 'test',
+  bookingPaymentExpiryMinutes: getNumber('BOOKING_PAYMENT_EXPIRY_MINUTES', 15),
   vapidSubject: process.env.VAPID_SUBJECT || 'mailto:support@haango.in',
   vapidPublicKey: process.env.VAPID_PUBLIC_KEY || '',
   vapidPrivateKey: process.env.VAPID_PRIVATE_KEY || '',

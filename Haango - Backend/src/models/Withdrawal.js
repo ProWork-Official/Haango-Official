@@ -14,9 +14,6 @@ const withdrawalSchema = new mongoose.Schema(
     destinationMasked: { type: String, required: true },
     adminNote: { type: String, trim: true, maxlength: 500, default: '' },
     transactionReference: { type: String, trim: true, maxlength: 150, default: '' },
-    razorpayXContactId: { type: String, trim: true, default: '' },
-    razorpayXFundAccountId: { type: String, trim: true, default: '' },
-    razorpayXPayoutId: { type: String, trim: true, default: '' },
     failureReason: { type: String, trim: true, maxlength: 500, default: '' },
   },
   { timestamps: true }

@@ -26,7 +26,7 @@ export async function getDashboardStats() {
     Booking.countDocuments({ bookingStatus: 'COMPLETED' }),
     Booking.countDocuments({ bookingStatus: 'CANCELLED' }),
     Booking.aggregate([
-      { $match: { paymentStatus: 'PAID', bookingStatus: 'COMPLETED' } },
+      { $match: { bookingStatus: 'COMPLETED' } },
       {
         $group: {
           _id: null,

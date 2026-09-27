@@ -53,15 +53,3 @@ export async function adminUpdateWithdrawal(req, res, next) {
   }
 }
 
-export async function payoutWebhook(req, res, next) {
-  try {
-    await walletService.handlePayoutWebhook(
-      req.body,
-      req.headers['x-razorpay-signature'],
-      req.rawBody,
-    );
-    res.json(success({ received: true }));
-  } catch (err) {
-    next(err);
-  }
-}

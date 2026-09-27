@@ -358,14 +358,12 @@ export async function refreshUserSession(refreshTokenValue) {
   await user.save();
 
   const accessToken = signToken(user._id);
-  const nextRefreshToken = signToken(user._id, env.refreshTokenSecret, env.refreshTokenExpiresIn);
-  const nextHash = hashTokenValue(nextRefreshToken);
-
-  storedToken.tokenHash = nextHash;
+  // Keep the refresh token stable so simultaneous tabs do not revoke each
+  // other's session during rotation.
   storedToken.expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
   await storedToken.save();
 
-  return { user, accessToken, refreshToken: nextRefreshToken };
+  return { user, accessToken, refreshToken: refreshTokenValue };
 }
 
 export async function revokeRefreshToken(refreshTokenValue) {

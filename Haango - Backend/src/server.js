@@ -371,7 +371,8 @@ async function start() {
     console.log(`\n✓ Haango API + Socket.IO running on port ${env.port}`);
     console.log(`  Environment: ${env.nodeEnv}`);
     console.log(`  Client URL: ${env.clientUrl}`);
-    console.log(`  Razorpay: ${env.razorpayKeyId ? 'Configured' : 'Not configured'}`);
+    console.log(`  Cookies: secure=${env.cookieSecure}, sameSite=${env.cookieSameSite}`);
+    console.log(`  CORS origins configured: ${env.corsOrigins.length}`);
     console.log('');
   });
 }

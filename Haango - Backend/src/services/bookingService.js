@@ -12,8 +12,8 @@ import User from '../models/User.js';
 import { sendOtpEmail } from './emailService.js';
 import LocationAccessLog from '../models/LocationAccessLog.js';
 import { recordAdminAction } from './adminAuditService.js';
-import { creditWallet } from './customerWalletService.js';
 import { findAvailableCoupon } from './couponService.js';
+import { settleCompletedBookingPayout } from './walletService.js';
 
 const LOCATION_RETENTION_MS = 24 * 60 * 60 * 1000;
 const LOCATION_STALE_MS = 2 * 60 * 1000;
@@ -98,6 +98,20 @@ function clearBookingLocations(booking) {
   booking.meeting.locations = [];
 }
 
+async function expirePaymentHolds(scope = {}) {
+  await Booking.updateMany({
+    ...scope,
+    bookingStatus: 'PAYMENT_PENDING',
+    'payment.expiresAt': { $lte: new Date() },
+  }, {
+    $set: {
+      bookingStatus: 'CANCELLED',
+      'payment.status': 'FAILED',
+      'payment.failureReason': 'Payment session expired',
+    },
+  });
+}
+
 export async function purgeExpiredBookingLocations() {
   const cutoff = new Date(Date.now() - LOCATION_RETENTION_MS);
   await Booking.updateMany(
@@ -106,7 +120,7 @@ export async function purgeExpiredBookingLocations() {
   );
 }
 
-export async function createBooking(customerId, data) {
+export async function createBooking(customerId, data, { paymentPending = false } = {}) {
   const buddy = await BuddyProfile.findById(data.buddyId);
   if (!buddy) throw notFound('Buddy not found');
   if (buddy.verificationStatus !== 'VERIFIED') throw badRequest('Buddy is not verified', 'BUDDY_NOT_VERIFIED');
@@ -131,11 +145,15 @@ export async function createBooking(customerId, data) {
   }
   if (bookingStart < new Date()) throw badRequest('Cannot book in the past', 'PAST_DATE');
 
-  const conflicting = await Booking.findOne({
+  const bookingQuery = {
     buddyId: buddy.userId,
     date: bookingDate,
     startTime: data.startTime,
-    bookingStatus: { $in: ['PENDING', 'CONFIRMED', 'ONGOING'] },
+  };
+  await expirePaymentHolds(bookingQuery);
+  const conflicting = await Booking.findOne({
+    ...bookingQuery,
+    bookingStatus: { $in: ['PAYMENT_PENDING', 'PENDING', 'CONFIRMED', 'ONGOING'] },
   });
   if (conflicting) throw conflict('Buddy already booked for this time slot', 'DOUBLE_BOOKING');
 
@@ -160,19 +178,30 @@ export async function createBooking(customerId, data) {
     buddyRate,
     platformFee,
     totalAmount,
-    amountDue: totalAmount,
     couponCode: String(data.couponCode || '').trim().toUpperCase(),
     couponDiscount,
     customerNotes: data.customerNotes || '',
-    paymentStatus: 'PENDING',
-    bookingStatus: 'PENDING',
+    bookingStatus: paymentPending ? 'PAYMENT_PENDING' : 'PENDING',
+    ...(paymentPending ? {
+      payment: {
+        provider: 'PAYU',
+        status: 'PENDING',
+        amount: Math.max(0, totalAmount - couponDiscount),
+        expiresAt: new Date(Date.now() + env.bookingPaymentExpiryMinutes * 60 * 1000),
+      },
+    } : {}),
   });
 
   return booking;
 }
 
 export async function getCustomerBookings(customerId, status) {
-  const query = { customerId };
+  await expirePaymentHolds({ customerId });
+  const query = {
+    customerId,
+    isCleared: { $ne: true },
+    'payment.status': { $nin: ['FAILED', 'ABANDONED'] },
+  };
   if (status) query.bookingStatus = status;
   return Booking.find(query)
     .populate('buddyProfileId', 'displayName city profileImages')
@@ -181,8 +210,13 @@ export async function getCustomerBookings(customerId, status) {
 }
 
 export async function getBuddyBookings(buddyId, status) {
-  const query = { buddyId };
-  if (status) query.bookingStatus = status;
+  await expirePaymentHolds({ buddyId });
+  const query = {
+    buddyId,
+    isCleared: { $ne: true },
+    'payment.status': { $nin: ['FAILED', 'ABANDONED'] },
+    bookingStatus: status && status !== 'PAYMENT_PENDING' ? status : { $ne: 'PAYMENT_PENDING' },
+  };
   return Booking.find(query)
     .populate('customerId', 'name email profileImage')
     .populate('activityId', 'name slug emoji')
@@ -192,6 +226,7 @@ export async function getBuddyBookings(buddyId, status) {
 export async function getBookingById(bookingId, userId, userRole) {
   const booking = await Booking.findById(bookingId);
   if (!booking) throw notFound('Booking not found');
+  if (booking.isCleared) throw notFound('Booking not found');
 
   if (userRole === 'CUSTOMER' && String(booking.customerId) !== String(userId)) {
     throw forbidden('Not your booking');
@@ -214,7 +249,7 @@ export async function cancelBooking(bookingId, userId, userRole) {
     throw forbidden('Not your booking');
   }
 
-  if (['COMPLETED', 'CANCELLED', 'REJECTED', 'ONGOING'].includes(booking.bookingStatus) || isCallUnlocked(booking)) {
+  if (['PAYMENT_PENDING', 'COMPLETED', 'CANCELLED', 'REJECTED', 'ONGOING'].includes(booking.bookingStatus) || isCallUnlocked(booking)) {
     throw badRequest('Booking cannot be cancelled', 'INVALID_STATUS');
   }
 
@@ -222,6 +257,34 @@ export async function cancelBooking(bookingId, userId, userRole) {
   clearBookingLocations(booking);
   await booking.save();
   return booking;
+}
+
+export async function clearPendingPaymentBooking(bookingId, customerId) {
+  const booking = await Booking.findOneAndUpdate(
+    {
+      _id: bookingId,
+      customerId,
+      bookingStatus: 'PAYMENT_PENDING',
+      'payment.status': 'PENDING',
+      isCleared: { $ne: true },
+    },
+    {
+      $set: {
+        bookingStatus: 'CANCELLED',
+        isCleared: true,
+        'payment.status': 'ABANDONED',
+        'payment.failureReason': 'Cleared by customer before payment completed',
+      },
+    },
+    { new: true, runValidators: true },
+  );
+
+  if (booking) return booking;
+
+  const existing = await Booking.findById(bookingId).select('customerId bookingStatus payment.status');
+  if (!existing) throw notFound('Booking not found');
+  if (String(existing.customerId) !== String(customerId)) throw forbidden('Not your booking');
+  throw conflict('Only an unpaid pending booking can be cleared', 'BOOKING_NOT_CLEARABLE');
 }
 
 function meetingStart(booking) {
@@ -243,10 +306,10 @@ export function isCallAvailable(booking) {
 }
 
 async function assertCallParticipant(bookingId, userId, requireAvailable = true) {
-  const booking = await Booking.findById(bookingId).select('customerId buddyId paymentStatus bookingStatus date startTime duration');
+  const booking = await Booking.findById(bookingId).select('customerId buddyId bookingStatus date startTime duration');
   if (!booking) throw notFound('Booking not found');
   assertParticipant(booking, userId);
-  if (booking.paymentStatus !== 'PAID' || (requireAvailable && !isCallAvailable(booking))) throw forbidden('Calls are unavailable after the meeting ends');
+  if (!['CONFIRMED', 'ONGOING'].includes(booking.bookingStatus) || (requireAvailable && !isCallAvailable(booking))) throw forbidden('Calls are unavailable for this booking');
   return booking;
 }
 
@@ -271,6 +334,9 @@ export async function issueMeetingOtp(bookingId, userId, phase) {
   const booking = await Booking.findById(bookingId).select('+meeting.startOtpHash +meeting.endOtpHash +meeting.customerStartOtpHash +meeting.buddyStartOtpHash +meeting.customerEndOtpHash +meeting.buddyEndOtpHash');
   if (!booking) throw notFound('Booking not found');
   assertParticipant(booking, userId);
+  if (!['NOT_REQUIRED', 'PAID'].includes(booking.payment?.status)) {
+    throw badRequest('Booking payment has not been completed', 'PAYMENT_REQUIRED');
+  }
   if (String(booking.customerId) !== String(userId)) {
     throw forbidden('Only the customer can generate the meeting code');
   }
@@ -292,6 +358,9 @@ export async function verifyMeetingOtp(bookingId, userId, phase, code) {
   const booking = await Booking.findById(bookingId).select('+meeting.startOtpHash +meeting.endOtpHash +meeting.customerStartOtpHash +meeting.buddyStartOtpHash +meeting.customerEndOtpHash +meeting.buddyEndOtpHash');
   if (!booking) throw notFound('Booking not found');
   assertParticipant(booking, userId);
+  if (!['NOT_REQUIRED', 'PAID'].includes(booking.payment?.status)) {
+    throw badRequest('Booking payment has not been completed', 'PAYMENT_REQUIRED');
+  }
   if (String(booking.buddyId) !== String(userId)) {
     throw forbidden('Only the companion can enter the meeting code');
   }
@@ -314,6 +383,7 @@ export async function verifyMeetingOtp(bookingId, userId, phase, code) {
     booking.bookingStatus = 'COMPLETED';
     booking.meeting.endedAt = new Date();
     clearBookingLocations(booking);
+    await settleCompletedBookingPayout(booking);
   }
   await booking.save();
   return booking;
@@ -339,12 +409,6 @@ export async function reviewCancellation(requestId, adminId, status, adminNotes 
   if (status === 'APPROVED') {
     request.bookingId.bookingStatus = 'CANCELLED';
     clearBookingLocations(request.bookingId);
-    if (request.bookingId.paymentStatus === 'PAID') {
-      const creditAmount = Math.max(0, Number(request.bookingId.totalAmount || 0) - Number(request.bookingId.couponDiscount || 0));
-      await creditWallet(request.bookingId.customerId, creditAmount, 'CANCELLATION_CREDIT', `cancellation-credit-${request.bookingId._id}`, { bookingId: request.bookingId._id, description: 'Wallet credit from approved cancelled booking' });
-      request.bookingId.paymentStatus = 'REFUNDED';
-      request.bookingId.walletCreditAmount = creditAmount;
-    }
     await request.bookingId.save();
   }
   await request.save();
@@ -355,7 +419,7 @@ export async function updateParticipantLocation(bookingId, userId, location, req
   const booking = await Booking.findById(bookingId);
   if (!booking) throw notFound('Booking not found');
   assertParticipant(booking, userId);
-  if (booking.paymentStatus !== 'PAID' || ['COMPLETED', 'CANCELLED', 'REJECTED'].includes(booking.bookingStatus)) {
+  if (!['CONFIRMED', 'ONGOING'].includes(booking.bookingStatus)) {
     throw forbidden('Location sharing is unavailable for this booking');
   }
   if (!isLocationUnlocked(booking)) throw forbidden('Location sharing is locked outside the meeting window');
@@ -382,10 +446,10 @@ export async function updateParticipantLocation(bookingId, userId, location, req
 }
 
 export async function getParticipantLocations(bookingId, userId, request) {
-  const booking = await Booking.findById(bookingId).select('customerId buddyId paymentStatus bookingStatus meeting.locations date startTime duration');
+  const booking = await Booking.findById(bookingId).select('customerId buddyId bookingStatus meeting.locations date startTime duration');
   if (!booking) throw notFound('Booking not found');
   assertParticipant(booking, userId);
-  if (booking.paymentStatus !== 'PAID' || ['COMPLETED', 'CANCELLED', 'REJECTED'].includes(booking.bookingStatus)) {
+  if (!['CONFIRMED', 'ONGOING'].includes(booking.bookingStatus)) {
     throw forbidden('Location sharing is unavailable for this booking');
   }
   if (!isLocationUnlocked(booking)) throw forbidden('Location sharing is locked outside the meeting window');
@@ -417,6 +481,10 @@ export async function updateBookingStatus(bookingId, buddyId, newStatus) {
     throw forbidden('Not your booking');
   }
 
+  if (booking.payment?.status !== 'NOT_REQUIRED' && booking.payment?.status !== 'PAID') {
+    throw badRequest('Booking payment has not been completed', 'PAYMENT_REQUIRED');
+  }
+
   const validTransitions = {
     CONFIRMED: ['PENDING'],
     REJECTED: ['PENDING'],
@@ -444,7 +512,10 @@ export async function updateBookingStatus(bookingId, buddyId, newStatus) {
 
 export async function getAllBookings(filters = {}) {
   const { status, page = 1, limit = 20 } = filters;
-  const query = {};
+  const query = {
+    isCleared: { $ne: true },
+    'payment.status': { $nin: ['FAILED', 'ABANDONED'] },
+  };
   if (status) query.bookingStatus = status;
 
   const skip = (page - 1) * limit;

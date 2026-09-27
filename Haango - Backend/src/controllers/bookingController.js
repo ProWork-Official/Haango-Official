@@ -1,13 +1,48 @@
 import * as bookingService from '../services/bookingService.js';
+import * as payuService from '../services/payuService.js';
 import { success, paginated, buildPagination } from '../utils/response.js';
 
 export async function createBooking(req, res, next) {
   try {
-    const booking = await bookingService.createBooking(req.user._id, req.body);
-    res.status(201).json(success(booking));
+    const checkout = await payuService.createBookingCheckout(req.user, req.body);
+    res.status(201).json(success(checkout));
   } catch (err) {
     next(err);
   }
+}
+
+export async function payuReturn(req, res) {
+  const returnFields = { ...(req.query || {}), ...(req.body || {}) };
+  let result;
+  try {
+    result = await payuService.processPayuReturn(returnFields);
+  } catch (err) {
+    console.error('PayU return processing failed:', err.message);
+    result = {
+      booking: await payuService.findPayuReturnBooking(returnFields).catch(() => null),
+      paid: false,
+      verified: false,
+    };
+  }
+
+  const params = new URLSearchParams();
+  const buddyId = result.booking?.buddyProfileId || returnFields.udf3 || returnFields.buddyId;
+  if (/^[a-f\d]{24}$/i.test(String(buddyId || ''))) {
+    params.set('buddyId', String(buddyId));
+  }
+  if (result.booking?._id) params.set('bookingId', String(result.booking._id));
+  if (result.booking?.duration) params.set('duration', String(result.booking.duration));
+  if (result.booking?.payment?.amount !== undefined) {
+    params.set('paymentAmount', String(result.booking.payment.amount));
+  }
+
+  const payment = !result.verified
+    ? 'failed'
+    : result.booking?.payment.status === 'REFUND_PENDING'
+      ? 'refund-pending'
+      : result.paid ? 'success' : 'failed';
+  params.set('payment', payment);
+  res.redirect(303, `${payuService.getClientBookingUrl()}?${params.toString()}`);
 }
 
 export async function getMyBookings(req, res, next) {
@@ -41,6 +76,15 @@ export async function cancelBooking(req, res, next) {
   try {
     const booking = await bookingService.cancelBooking(req.params.id, req.user._id, req.user.role);
     res.json(success(booking));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function clearPendingPaymentBooking(req, res, next) {
+  try {
+    await bookingService.clearPendingPaymentBooking(req.params.id, req.user._id);
+    res.json(success({ cleared: true }));
   } catch (err) {
     next(err);
   }

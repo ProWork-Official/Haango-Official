@@ -18,9 +18,9 @@ function sanitizeMessage(text) {
   return sanitized.trim();
 }
 
-function assertPaidBooking(booking) {
-  if (booking.paymentStatus !== 'PAID') {
-    throw forbidden('Messaging unlocks after the booking payment is completed');
+function assertMessagingBooking(booking) {
+  if (!['CONFIRMED', 'ONGOING', 'COMPLETED'].includes(booking.bookingStatus)) {
+    throw forbidden('Messaging is available after the booking is confirmed');
   }
 }
 
@@ -41,7 +41,7 @@ export async function getConversationMessages(bookingId, userId) {
   if (String(booking.customerId) !== String(userId) && String(booking.buddyId) !== String(userId)) {
     throw forbidden('Not part of this conversation');
   }
-  assertPaidBooking(booking);
+  assertMessagingBooking(booking);
   const otherUserId = String(booking.customerId) === String(userId) ? booking.buddyId : booking.customerId;
   await assertNotBlocked(userId, otherUserId);
 
@@ -61,7 +61,7 @@ export async function sendMessage(bookingId, senderId, text, options = {}) {
     throw forbidden('Not part of this conversation');
   }
 
-  assertPaidBooking(booking);
+  assertMessagingBooking(booking);
   await assertNotBlocked(senderId, receiverId);
 
   const normalizedType = options.type === 'call-status' ? 'call-status' : 'text';
@@ -128,7 +128,7 @@ export async function markMessageAsRead(messageId, userId) {
 export async function getConversations(userId) {
   const bookings = await Booking.find({
     $or: [{ customerId: userId }, { buddyId: userId }],
-    paymentStatus: 'PAID',
+    bookingStatus: { $in: ['CONFIRMED', 'ONGOING', 'COMPLETED'] },
   })
     .populate('customerId', 'name profileImage')
     .populate('buddyId', 'name profileImage')

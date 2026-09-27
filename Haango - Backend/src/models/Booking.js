@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 const bookingSchema = new mongoose.Schema(
   {
     bookingId: { type: String, required: true, unique: true, index: true },
+    isCleared: { type: Boolean, default: false, index: true },
     customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     buddyId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     buddyProfileId: { type: mongoose.Schema.Types.ObjectId, ref: 'BuddyProfile', required: true },
@@ -17,21 +18,21 @@ const bookingSchema = new mongoose.Schema(
     totalAmount: { type: Number, required: true, min: 0 },
     couponCode: { type: String, trim: true, uppercase: true, default: '' },
     couponDiscount: { type: Number, min: 0, default: 0 },
-    walletAmount: { type: Number, min: 0, default: 0 },
-    amountDue: { type: Number, min: 0, default: 0 },
-    walletDebitReference: { type: String, trim: true, default: '' },
-    walletCreditAmount: { type: Number, min: 0, default: 0 },
-    paymentStatus: {
+    bookingStatus: {
       type: String,
-      enum: ['PENDING', 'PAID', 'FAILED', 'REFUNDED', 'PARTIALLY_REFUNDED'],
+      enum: ['PAYMENT_PENDING', 'PENDING', 'CONFIRMED', 'ONGOING', 'COMPLETED', 'CANCELLED', 'REJECTED'],
       default: 'PENDING',
       index: true,
     },
-    bookingStatus: {
-      type: String,
-      enum: ['PENDING', 'CONFIRMED', 'ONGOING', 'COMPLETED', 'CANCELLED', 'REJECTED'],
-      default: 'PENDING',
-      index: true,
+    payment: {
+      provider: { type: String, enum: ['PAYU'], default: 'PAYU' },
+      status: { type: String, enum: ['NOT_REQUIRED', 'PENDING', 'PAID', 'FAILED', 'ABANDONED', 'REFUND_PENDING', 'REFUNDED'], default: 'NOT_REQUIRED', index: true },
+      txnId: { type: String, default: '', trim: true },
+      gatewayPaymentId: { type: String, default: '', trim: true },
+      amount: { type: Number, min: 0, default: 0 },
+      paidAt: { type: Date, default: null },
+      expiresAt: { type: Date, default: null },
+      failureReason: { type: String, default: '', maxlength: 300 },
     },
     meeting: {
       startOtpHash: { type: String, select: false, default: '' },
@@ -54,21 +55,22 @@ const bookingSchema = new mongoose.Schema(
         updatedAt: { type: Date, default: Date.now },
       }],
     },
-    extensionHours: { type: Number, min: 0, default: 0 },
-    extensionAmount: { type: Number, min: 0, default: 0 },
-    extensionPaymentStatus: { type: String, enum: ['NONE', 'PENDING', 'PAID'], default: 'NONE' },
-    extensionOrderId: { type: String, default: '' },
-    extensionPaymentId: { type: String, default: '' },
-    extensionSignature: { type: String, default: '' },
+    buddyPayoutAmount: { type: Number, min: 0, default: 0 },
+    platformShareAmount: { type: Number, min: 0, default: 0 },
+    payoutEligibleAt: { type: Date, default: null },
+    payoutStatus: {
+      type: String,
+      enum: ['PENDING', 'READY', 'PROCESSING', 'PAID', 'REJECTED'],
+      default: 'PENDING',
+      index: true,
+    },
     customerNotes: { type: String, trim: true, maxlength: 1000, default: '' },
-    razorpayOrderId: { type: String, default: '' },
-    razorpayPaymentId: { type: String, default: '' },
-    razorpaySignature: { type: String, default: '' },
   },
   { timestamps: true }
 );
 
 bookingSchema.index({ buddyId: 1, date: 1, bookingStatus: 1 });
 bookingSchema.index({ customerId: 1, date: 1, bookingStatus: 1 });
+bookingSchema.index({ 'payment.txnId': 1 }, { unique: true, partialFilterExpression: { 'payment.txnId': { $gt: '' } } });
 
 export default mongoose.model('Booking', bookingSchema);

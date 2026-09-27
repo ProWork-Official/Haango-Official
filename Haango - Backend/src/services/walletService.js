@@ -1,38 +1,93 @@
-import crypto from 'node:crypto';
 import Booking from '../models/Booking.js';
 import Wallet from '../models/Wallet.js';
 import Withdrawal from '../models/Withdrawal.js';
 import WalletBonus from '../models/WalletBonus.js';
 import { getBonusStatus, ensureEarlyStarterBonus } from './bonusService.js';
-import User from '../models/User.js';
-import { env } from '../config/environment.js';
 import { badRequest, forbidden, notFound } from '../utils/errors.js';
 import { recordAdminAction } from './adminAuditService.js';
 
 const MIN_WITHDRAWAL = 300;
 const ACTIVE_WITHDRAWAL_STATUSES = ['PENDING', 'PROCESSING', 'PAID'];
+const BANK_HOLIDAYS = new Set([
+  '2025-01-26', '2025-02-12', '2025-02-13', '2025-02-14', '2025-02-15', '2025-02-16', '2025-02-17',
+  '2025-03-31', '2025-04-10', '2025-05-01', '2025-06-06', '2025-08-15', '2025-08-16', '2025-08-27',
+  '2025-09-05', '2025-09-17', '2025-10-02', '2025-11-15', '2025-12-25',
+  '2026-01-26', '2026-02-11', '2026-02-12', '2026-02-13', '2026-02-14', '2026-02-15', '2026-02-16',
+  '2026-03-20', '2026-04-03', '2026-04-14', '2026-05-01', '2026-06-06', '2026-08-15', '2026-08-27',
+  '2026-09-17', '2026-10-02', '2026-11-15', '2026-12-25',
+]);
 
-function assertRazorpayXConfigured() {
-  if (!env.razorpayXKeyId || !env.razorpayXKeySecret || !env.razorpayXAccountNumber) {
-    throw badRequest('Automatic payouts are not configured. Add RazorpayX payout credentials.', 'PAYOUT_NOT_CONFIGURED');
-  }
+export function computeBuddyPayoutBreakdown({ buddyRate, duration, amount = null }) {
+  const baseAmount = Number(amount ?? ((Number(buddyRate || 0) * Number(duration || 0)) || 0));
+  const buddyPayoutAmount = Math.round(baseAmount * 0.8);
+  const platformShareAmount = Math.round(baseAmount * 0.2);
+
+  return {
+    buddyPayoutAmount,
+    platformShareAmount,
+    totalBookingValue: Math.round(baseAmount),
+  };
 }
 
-async function razorpayXRequest(path, options = {}) {
-  assertRazorpayXConfigured();
-  const response = await fetch(`https://api.razorpay.com/v1${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Basic ${Buffer.from(`${env.razorpayXKeyId}:${env.razorpayXKeySecret}`).toString('base64')}`,
-      ...(options.headers || {}),
-    },
-  });
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw badRequest(payload?.error?.description || 'RazorpayX payout request failed', 'PAYOUT_PROVIDER_ERROR');
+function isBusinessDay(date) {
+  const day = new Date(date);
+  day.setHours(0, 0, 0, 0);
+  const dayOfWeek = day.getDay();
+  if (dayOfWeek === 0 || dayOfWeek === 6) return false;
+  return !BANK_HOLIDAYS.has(day.toISOString().slice(0, 10));
+}
+
+function getNextBusinessDay(date) {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+
+  do {
+    next.setDate(next.getDate() + 1);
+  } while (!isBusinessDay(next));
+
+  return next;
+}
+
+export function resolvePayoutCycle(referenceDate = new Date()) {
+  const base = new Date(referenceDate);
+  if (Number.isNaN(base.getTime())) {
+    return { settlementDate: new Date(), settlementWindow: 'T+2 business day', referenceDate: new Date() };
   }
-  return payload;
+
+  let settlementDate = new Date(base);
+  settlementDate.setHours(0, 0, 0, 0);
+
+  if (isBusinessDay(settlementDate) && (base.getHours() >= 21 || base.getHours() < 9)) {
+    settlementDate = getNextBusinessDay(settlementDate);
+  }
+
+  settlementDate = getNextBusinessDay(settlementDate);
+  settlementDate = getNextBusinessDay(settlementDate);
+
+  return {
+    settlementDate,
+    settlementWindow: 'T+2 business day',
+    referenceDate: base,
+  };
+}
+
+export async function settleCompletedBookingPayout(booking) {
+  if (!booking) return booking;
+  if (String(booking.bookingStatus || '').toUpperCase() !== 'COMPLETED') return booking;
+  if (booking.buddyPayoutAmount > 0 && booking.payoutStatus === 'PAID') return booking;
+
+  const completionDate = booking.meeting?.endedAt || booking.updatedAt || new Date();
+  const breakdown = computeBuddyPayoutBreakdown({
+    buddyRate: booking.buddyRate,
+    duration: booking.duration,
+  });
+
+  booking.buddyPayoutAmount = breakdown.buddyPayoutAmount;
+  booking.platformShareAmount = breakdown.platformShareAmount;
+  booking.payoutEligibleAt = resolvePayoutCycle(completionDate).settlementDate;
+  booking.payoutStatus = 'READY';
+
+  return booking;
 }
 
 function maskAccountNumber(accountNumber) {
@@ -82,7 +137,7 @@ async function getEarnings(userId, period = 'month') {
 
   const [earningsResult, allTimeEarningsResult, withdrawalsResult, bonusResult, completionResult] = await Promise.all([
     Booking.aggregate([
-      { $match: { buddyId: userId, paymentStatus: 'PAID', bookingStatus: 'COMPLETED', updatedAt: { $gte: periodStart } } },
+      { $match: { buddyId: userId, bookingStatus: 'COMPLETED', updatedAt: { $gte: periodStart } } },
       {
         $group: {
           _id: null,
@@ -91,7 +146,7 @@ async function getEarnings(userId, period = 'month') {
       },
     ]),
     Booking.aggregate([
-      { $match: { buddyId: userId, paymentStatus: 'PAID', bookingStatus: 'COMPLETED' } },
+      { $match: { buddyId: userId, bookingStatus: 'COMPLETED' } },
       { $group: { _id: null, totalEarned: { $sum: { $multiply: [{ $multiply: ['$buddyRate', '$duration'] }, 0.8] } } } },
     ]),
     Withdrawal.aggregate([
@@ -178,88 +233,12 @@ export async function savePayoutDetails(userId, data) {
       accountNumber: payoutMethod === 'BANK' ? accountNumber : '',
       ifscCode: payoutMethod === 'BANK' ? ifscCode : '',
       upiId: payoutMethod === 'UPI' ? upiId : '',
-      razorpayXContactId: '',
-      razorpayXBankFundAccountId: '',
-      razorpayXUpiFundAccountId: '',
       isVerified: false,
     },
     { upsert: true, new: true, runValidators: true }
   ).select('+accountNumber');
 
   return toSafeWallet(wallet);
-}
-
-async function ensureRazorpayXFundAccount(wallet, user) {
-  assertRazorpayXConfigured();
-
-  let contactId = wallet.razorpayXContactId;
-  if (!contactId) {
-    const contact = await razorpayXRequest('/contacts', {
-      method: 'POST',
-      body: JSON.stringify({
-        name: wallet.accountHolderName,
-        email: user.email,
-        contact: user.phone,
-        type: 'vendor',
-        reference_id: `haango_${String(user._id).slice(-24)}`,
-      }),
-    });
-    contactId = contact.id;
-    wallet.razorpayXContactId = contactId;
-    await wallet.save();
-  }
-
-  const fundAccountField = wallet.payoutMethod === 'UPI'
-    ? 'razorpayXUpiFundAccountId'
-    : 'razorpayXBankFundAccountId';
-  let fundAccountId = wallet[fundAccountField];
-  if (!fundAccountId) {
-    const account = wallet.payoutMethod === 'UPI'
-      ? { account_type: 'vpa', vpa: { address: wallet.upiId } }
-      : {
-        account_type: 'bank_account',
-        bank_account: {
-          name: wallet.accountHolderName,
-          ifsc: wallet.ifscCode,
-          account_number: wallet.accountNumber,
-        },
-      };
-    const fundAccount = await razorpayXRequest('/fund_accounts', {
-      method: 'POST',
-      body: JSON.stringify({ contact_id: contactId, ...account }),
-    });
-    fundAccountId = fundAccount.id;
-    wallet[fundAccountField] = fundAccountId;
-    await wallet.save();
-  }
-
-  return { contactId, fundAccountId };
-}
-
-async function createAutomaticPayout(withdrawal, wallet, user) {
-  const { contactId, fundAccountId } = await ensureRazorpayXFundAccount(wallet, user);
-  const payout = await razorpayXRequest('/payouts', {
-    method: 'POST',
-    body: JSON.stringify({
-      account_number: env.razorpayXAccountNumber,
-      fund_account_id: fundAccountId,
-      amount: Math.round(withdrawal.amount * 100),
-      currency: 'INR',
-      mode: wallet.payoutMethod === 'UPI' ? 'UPI' : 'IMPS',
-      purpose: 'payout',
-      queue_if_low_balance: true,
-      reference_id: `wd_${String(withdrawal._id).slice(-24)}`,
-      narration: 'Haango companion earnings',
-    }),
-  });
-
-  withdrawal.status = payout.status === 'processed' ? 'PAID' : 'PROCESSING';
-  withdrawal.razorpayXContactId = contactId;
-  withdrawal.razorpayXFundAccountId = fundAccountId;
-  withdrawal.razorpayXPayoutId = payout.id;
-  withdrawal.transactionReference = payout.utr || '';
-  await withdrawal.save();
-  return withdrawal;
 }
 
 export async function requestWithdrawal(userId, amount) {
@@ -278,51 +257,12 @@ export async function requestWithdrawal(userId, amount) {
     ? maskUpiId(wallet.upiId)
     : maskAccountNumber(wallet.accountNumber);
 
-  const user = await User.findById(userId).select('name email phone');
-  if (!user) throw notFound('User not found');
-
-  const withdrawal = await Withdrawal.create({
+  return Withdrawal.create({
     userId,
     amount: Math.round(numericAmount),
     payoutMethod: wallet.payoutMethod,
     destinationMasked,
   });
-
-  try {
-    return await createAutomaticPayout(withdrawal, wallet, user);
-  } catch (error) {
-    withdrawal.status = 'REJECTED';
-    withdrawal.failureReason = error.message || 'Automatic payout failed';
-    await withdrawal.save();
-    throw error;
-  }
-}
-
-export async function handlePayoutWebhook(body, signature, rawBody) {
-  assertRazorpayXConfigured();
-  if (!env.razorpayXWebhookSecret) {
-    throw badRequest('RazorpayX webhook secret is not configured', 'PAYOUT_WEBHOOK_NOT_CONFIGURED');
-  }
-  const expectedSignature = crypto.createHmac('sha256', env.razorpayXWebhookSecret)
-    .update(rawBody || JSON.stringify(body))
-    .digest('hex');
-  if (expectedSignature !== signature) throw badRequest('Invalid RazorpayX webhook signature', 'INVALID_PAYOUT_WEBHOOK');
-
-  const payout = body?.payload?.payout?.entity;
-  if (!payout?.id) return;
-  const withdrawal = await Withdrawal.findOne({ razorpayXPayoutId: payout.id });
-  if (!withdrawal) return;
-
-  if (body.event === 'payout.processed') {
-    withdrawal.status = 'PAID';
-    withdrawal.transactionReference = payout.utr || withdrawal.transactionReference;
-  } else if (['payout.failed', 'payout.reversed'].includes(body.event)) {
-    withdrawal.status = 'REJECTED';
-    withdrawal.failureReason = payout.failure_reason || body.event;
-  } else if (['payout.pending', 'payout.queued', 'payout.processing'].includes(body.event)) {
-    withdrawal.status = 'PROCESSING';
-  }
-  await withdrawal.save();
 }
 
 export async function getAllWithdrawals(filters = {}) {

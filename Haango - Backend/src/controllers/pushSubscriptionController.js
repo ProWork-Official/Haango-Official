@@ -23,3 +23,12 @@ export async function unsubscribe(req, res, next) {
     next(err);
   }
 }
+
+export async function sendTest(req, res, next) {
+  try {
+    const result = await pushSubscriptionService.sendTestPush(req.user._id);
+    res.json(success(result));
+  } catch (err) {
+    next(err);
+  }
+}
