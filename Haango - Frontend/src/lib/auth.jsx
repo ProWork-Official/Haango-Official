@@ -4,33 +4,9 @@ import {
   useEffect,
   useState,
 } from 'react';
-
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL || 'http://localhost:5005/api';
+import { apiRequest } from './api';
 
 const AuthContext = createContext(undefined);
-
-async function apiRequest(path, options = {}) {
-  const accessToken = localStorage.getItem('haango_access_token');
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      ...(options.headers || {}),
-    },
-    ...options,
-  });
-
-  const payload = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    const message = payload?.message || payload?.error || 'Request failed';
-    throw new Error(message);
-  }
-
-  return payload?.data ?? payload;
-}
 
 function normalizeProfile(user) {
   if (!user) return null;
@@ -68,6 +44,22 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const storeRefreshToken = (token) => {
+    if (token) {
+      localStorage.setItem('haango_refresh_token', token);
+    } else {
+      localStorage.removeItem('haango_refresh_token');
+    }
+  };
+
+  const storeProfile = (nextProfile) => {
+    if (nextProfile) {
+      localStorage.setItem('haango_profile_cache', JSON.stringify(nextProfile));
+    } else {
+      localStorage.removeItem('haango_profile_cache');
+    }
+  };
+
   const hydrateSession = async () => {
     try {
       const storedToken = localStorage.getItem('haango_access_token');
@@ -80,26 +72,33 @@ export function AuthProvider({ children }) {
         return;
       }
 
-      try {
-        userPayload = await apiRequest('/auth/me');
-      } catch (error) {
-        const refreshed = await apiRequest('/auth/refresh', { method: 'POST' });
-        activeToken = refreshed?.token || refreshed?.accessToken;
-
-        if (!activeToken) throw error;
-
-        storeAccessToken(activeToken);
-        userPayload = refreshed;
-      }
+      userPayload = await apiRequest('/auth/me');
+      activeToken = localStorage.getItem('haango_access_token');
 
       const nextProfile = normalizeProfile(userPayload?.user || userPayload);
       setSession({ user: { id: nextProfile?.id }, token: activeToken });
       setProfile(nextProfile);
+      storeProfile(nextProfile);
     } catch (error) {
       console.warn('Session restore failed:', error.message);
-      storeAccessToken(null);
-      setSession(null);
-      setProfile(null);
+      if (error.status === 401) {
+        storeAccessToken(null);
+        storeRefreshToken(null);
+        storeProfile(null);
+        setSession(null);
+        setProfile(null);
+      } else {
+        let cachedProfile = null;
+        try {
+          cachedProfile = JSON.parse(localStorage.getItem('haango_profile_cache') || 'null');
+        } catch {
+          storeProfile(null);
+        }
+        if (cachedProfile?.id) {
+          setSession({ user: { id: cachedProfile.id }, token: localStorage.getItem('haango_access_token') });
+          setProfile(cachedProfile);
+        }
+      }
     } finally {
       setLoading(false);
     }
@@ -130,6 +129,8 @@ export function AuthProvider({ children }) {
       const token = response?.token || response?.accessToken || null;
       const normalizedUser = normalizeProfile(user);
       storeAccessToken(token);
+      storeRefreshToken(response?.refreshToken);
+      storeProfile(normalizedUser);
       setSession({ user: { id: normalizedUser?.id }, token });
       setProfile(normalizedUser);
 
@@ -183,6 +184,8 @@ export function AuthProvider({ children }) {
       const token = response?.token || response?.accessToken || null;
       const normalizedUser = normalizeProfile(user);
       storeAccessToken(token);
+      storeRefreshToken(response?.refreshToken);
+      storeProfile(normalizedUser);
       setSession({ user: { id: normalizedUser?.id }, token });
       setProfile(normalizedUser);
 
@@ -200,6 +203,8 @@ export function AuthProvider({ children }) {
     }
 
     storeAccessToken(null);
+    storeRefreshToken(null);
+    storeProfile(null);
     setSession(null);
     setProfile(null);
   };

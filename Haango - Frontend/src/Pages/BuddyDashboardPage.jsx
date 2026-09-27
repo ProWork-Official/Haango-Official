@@ -19,6 +19,7 @@ import { useAuth } from '../lib/auth';
 import { apiRequest } from '../lib/api';
 import WalletPanel from '../Components/WalletPanel';
 import { requestLocationPermission } from '../lib/location';
+import { getNextUpcomingBooking } from '../lib/bookingLists';
 
 function formatCurrency(value = 0) {
   return new Intl.NumberFormat('en-IN', {
@@ -476,7 +477,7 @@ export default function BuddyDashboardPage({ onNavigate, unreadCount = 0 }) {
   const [earningsPeriod, setEarningsPeriod] = useState('month');
   const [walletSummary, setWalletSummary] = useState(null);
   const [bonusClaiming, setBonusClaiming] = useState(false);
-  const [currentTime] = useState(() => Date.now());
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
   const isBuddyAccount = becameBuddy || authProfile?.role === 'BUDDY' || authProfile?.user_type === 'buddy' || authProfile?.is_buddy;
 
   useEffect(() => {
@@ -525,7 +526,14 @@ export default function BuddyDashboardPage({ onNavigate, unreadCount = 0 }) {
       }
     };
     loadBookings();
-    return () => { active = false; };
+    const interval = isBuddyAccount ? window.setInterval(() => {
+      setCurrentTime(Date.now());
+      loadBookings();
+    }, 30000) : null;
+    return () => {
+      active = false;
+      if (interval) window.clearInterval(interval);
+    };
   }, [isBuddyAccount]);
 
   useEffect(() => {
@@ -556,9 +564,8 @@ export default function BuddyDashboardPage({ onNavigate, unreadCount = 0 }) {
   };
 
   const upcomingBookings = useMemo(() => {
-    return buddyBookings
-      .filter((booking) => new Date(booking.date).getTime() >= currentTime && !['CANCELLED', 'REJECTED'].includes(booking.bookingStatus))
-      .slice(0, 3);
+    const nextBooking = getNextUpcomingBooking(buddyBookings, currentTime);
+    return nextBooking ? [nextBooking] : [];
   }, [buddyBookings, currentTime]);
 
   const periodStart = useMemo(() => {
@@ -575,7 +582,7 @@ export default function BuddyDashboardPage({ onNavigate, unreadCount = 0 }) {
 
   const todayBookings = buddyBookings.filter((booking) => new Date(booking.date).toDateString() === new Date().toDateString()).length;
   const earningsByMonth = Array.from({ length: earningsPeriod === 'month' ? 1 : earningsPeriod === '3m' ? 3 : earningsPeriod === '6m' ? 6 : 12 }, (_, index) => buddyBookings
-    .filter((booking) => booking.paymentStatus === 'PAID' && booking.bookingStatus === 'COMPLETED' && new Date(booking.updatedAt || booking.date) >= periodStart && new Date(booking.updatedAt || booking.date).getMonth() === new Date().getMonth() - (earningsPeriod === 'month' ? 0 : index))
+    .filter((booking) => booking.bookingStatus === 'COMPLETED' && new Date(booking.updatedAt || booking.date) >= periodStart && new Date(booking.updatedAt || booking.date).getMonth() === new Date().getMonth() - (earningsPeriod === 'month' ? 0 : index))
     .reduce((sum, booking) => sum + ((Number(booking.totalAmount || 0) - Number(booking.platformFee || 0)) * 0.8), 0));
   const maxMonthlyEarnings = Math.max(...earningsByMonth, 1);
 

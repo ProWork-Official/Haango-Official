@@ -10,6 +10,7 @@ import {
 import { useAuth } from '../lib/auth';
 import { apiRequest } from '../lib/api';
 import BuddyCard from '../Components/BuddyCard';
+import { getNextUpcomingBooking } from '../lib/bookingLists';
 
 const hobbyOptions = [
   'Travel', 'Coffee', 'Movies', 'Fitness', 'Shopping', 'Dining', 'Photography',
@@ -39,6 +40,7 @@ export default function DashboardPage({ onNavigate, onSelectBuddy, onMessage, un
   const [likedBuddies, setLikedBuddies] = useState([]);
   const [blockedLoading, setBlockedLoading] = useState(true);
   const [upcomingBookings, setUpcomingBookings] = useState([]);
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
   const [editingField, setEditingField] = useState(null);
   const [customerWallet, setCustomerWallet] = useState(null);
   const [referralCopied, setReferralCopied] = useState(false);
@@ -64,15 +66,8 @@ export default function DashboardPage({ onNavigate, onSelectBuddy, onMessage, un
   const allQuickWinsComplete = quickWinTasks.every((task) => task.complete);
 
   const earliestUpcomingBooking = useMemo(() => {
-    const now = Date.now();
-    return upcomingBookings
-      .filter((booking) => new Date(booking.date).getTime() >= now && !['CANCELLED', 'REJECTED'].includes(booking.bookingStatus))
-      .sort((first, second) => {
-        const firstTime = new Date(first.date).getTime();
-        const secondTime = new Date(second.date).getTime();
-        return firstTime - secondTime || String(first.startTime).localeCompare(String(second.startTime));
-      })[0] || null;
-  }, [upcomingBookings]);
+    return getNextUpcomingBooking(upcomingBookings, currentTime);
+  }, [upcomingBookings, currentTime]);
 
   useEffect(() => {
     let active = true;
@@ -93,10 +88,23 @@ export default function DashboardPage({ onNavigate, onSelectBuddy, onMessage, un
 
   useEffect(() => {
     let active = true;
-    apiRequest('/bookings/my-bookings')
-      .then((data) => { if (active) setUpcomingBookings(Array.isArray(data) ? data : []); })
-      .catch(() => {});
-    return () => { active = false; };
+    const refreshBookings = async () => {
+      try {
+        const data = await apiRequest('/bookings/my-bookings');
+        if (active) setUpcomingBookings(Array.isArray(data) ? data : []);
+      } catch (_) {
+        // Keep the current dashboard summary if a refresh fails.
+      }
+    };
+    refreshBookings();
+    const interval = window.setInterval(() => {
+      setCurrentTime(Date.now());
+      refreshBookings();
+    }, 30000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
   }, []);
 
   useEffect(() => {

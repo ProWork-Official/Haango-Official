@@ -19,7 +19,6 @@ import {
   Utensils,
   Footprints,
   TrendingUp,
-  CreditCard,
   Headphones,
 } from 'lucide-react';
 
@@ -284,16 +283,6 @@ function HomePage({ onNavigate, onSelectActivity, onSelectBuddy }) {
     />
     <span className="whitespace-nowrap text-sm font-semibold text-[#425066]">
       Verified Profiles
-    </span>
-  </div>
-
-  <div className="flex items-start gap-2">
-    <CreditCard
-      size={18}
-      className="shrink-0 text-[#3c70d9]"
-    />
-    <span className="whitespace-nowrap text-sm font-semibold text-[#425066]">
-      Secure Payments
     </span>
   </div>
 

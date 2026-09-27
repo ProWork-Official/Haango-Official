@@ -13,9 +13,9 @@ import {
 import BuddyCard from '../Components/BuddyCard';
 import { GridSkeleton } from '../Components/Skeletons';
 import { EmptyState } from '../Components/States';
+import { apiRequest } from '../lib/api';
 
 const cityOptions = ['Prayagraj', 'Lucknow', 'Greater Noida', 'Noida', 'Kanpur'];
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5005/api';
 
 const hobbyIconMap = {
   'movie night': Clapperboard,
@@ -29,27 +29,6 @@ const hobbyIconMap = {
 function getHobbyIcon(hobby) {
   const key = String(hobby || '').trim().toLowerCase();
   return hobbyIconMap[key] || Sparkles;
-}
-
-async function apiRequest(path, options = {}) {
-  const accessToken = localStorage.getItem('haango_access_token');
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    credentials: 'include',
-    cache: 'no-store',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      ...(options.headers || {}),
-    },
-    ...options,
-  });
-
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new Error(payload?.message || 'Request failed');
-  }
-
-  return payload?.data || payload?.buddies || payload;
 }
 
 function isBuddyAvailableNow(buddy = {}) {

@@ -1,19 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Calendar, CheckCircle2, ChevronRight, Clock, Lock, MapPin, MessageCircle, ShieldCheck, XCircle } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import { getCurrentLocation } from '../lib/location';
 import LiveLocationMap from '../Components/LiveLocationMap';
-
-function getIndiaCalendarDate(value) {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date(value));
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return new Date(Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day)));
-}
+import BookingListFilters from '../Components/BookingListFilters';
+import { getBookingList, getBookingStartTime, getIndiaDateKey, getIndiaDateOffset } from '../lib/bookingLists';
 
 function formatDate(value) {
   return new Date(value).toLocaleDateString('en-IN', {
@@ -31,8 +22,22 @@ export default function BuddyBookingsPage({ onBack, onMessage }) {
   const [openLocationMap, setOpenLocationMap] = useState(null);
   const [otpForm, setOtpForm] = useState(null);
   const [otpCode, setOtpCode] = useState('');
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
+  const [upcomingFilter, setUpcomingFilter] = useState('newest');
+  const [pastFilter, setPastFilter] = useState('newest');
+  const [upcomingDate, setUpcomingDate] = useState('');
+  const [pastDate, setPastDate] = useState('');
   const locationWatches = useRef({});
   useEffect(() => () => Object.values(locationWatches.current).forEach((watchId) => navigator.geolocation?.clearWatch(watchId)), []);
+  useEffect(() => {
+    const timer = window.setInterval(() => setCurrentTime(Date.now()), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const groupedBookings = useMemo(() => ({
+    upcoming: getBookingList(bookings, { section: 'upcoming', filter: upcomingFilter, selectedDate: upcomingDate, now: currentTime }),
+    past: getBookingList(bookings, { section: 'past', filter: pastFilter, selectedDate: pastDate, now: currentTime }),
+  }), [bookings, currentTime, upcomingFilter, upcomingDate, pastFilter, pastDate]);
 
   useEffect(() => {
     let active = true;
@@ -85,25 +90,7 @@ export default function BuddyBookingsPage({ onBack, onMessage }) {
     }
   };
 
-  const meetingStart = (booking) => {
-    const timeValue = String(booking.startTime || '').trim().toUpperCase();
-    const twelveHourMatch = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/.exec(timeValue);
-    const twentyFourHourMatch = /^(\d{1,2}):(\d{2})$/.exec(timeValue);
-    const match = twelveHourMatch || twentyFourHourMatch;
-    if (!match) return Number.NaN;
-
-    let hours = Number(match[1]);
-    const minutes = Number(match[2]);
-    if (twelveHourMatch) {
-      if (hours === 12) hours = 0;
-      if (match[3] === 'PM') hours += 12;
-    }
-
-    const date = getIndiaCalendarDate(booking.date);
-    date.setUTCHours(hours, minutes, 0, 0);
-    date.setTime(date.getTime() - 330 * 60 * 1000);
-    return date.getTime();
-  };
+  const meetingStart = getBookingStartTime;
   const locationUnlocked = (booking) => {
     if (booking.bookingStatus === 'ONGOING') return true;
     const start = meetingStart(booking);
@@ -155,16 +142,20 @@ export default function BuddyBookingsPage({ onBack, onMessage }) {
         {error && <p className="mt-5 rounded-2xl bg-error-50 p-4 text-sm text-error-600">{error}</p>}
         {locationError && <p className="mt-5 rounded-2xl bg-sky-50 p-4 text-sm text-sky-700">{locationError}</p>}
         {loading ? <p className="mt-8 text-ink-500">Loading bookings...</p> : (
-          <div className="mt-8 space-y-4">
-            {bookings.length ? bookings.map((booking) => (
+          <div className="mt-8 space-y-10">
+            <section>
+              <h2 className="font-display text-xl font-bold text-ink-900">Upcoming bookings</h2>
+              <BookingListFilters label="Upcoming bookings" value={upcomingFilter} onChange={setUpcomingFilter} dateValue={upcomingDate} onDateChange={setUpcomingDate} minDate={getIndiaDateKey(currentTime)} maxDate={getIndiaDateOffset(6, currentTime)} />
+              <div className="mt-4 space-y-4">
+            {groupedBookings.upcoming.length ? groupedBookings.upcoming.map((booking) => (
               <div key={booking._id} className="rounded-[28px] border border-[#e6ddd4] bg-[#f7f5f2] p-3 shadow-[0_4px_18px_rgba(17,24,39,0.04)] sm:p-5">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#5a7a9e]">{booking.activityId?.name || booking.activitySlug || 'HAANGO PLAN'}</p>
                     <h2 className="mt-1 font-display text-2xl font-black tracking-[-0.04em] text-ink-900">{booking.customerId?.name || 'Customer'}</h2>
-                    <div className="mt-2 flex items-center gap-2 text-sm font-semibold text-[#1d9d68]"><CheckCircle2 size={16} className="fill-[#1d9d68] text-white" /><span>{booking.bookingStatus}</span></div>
+                    <div className="mt-2 flex items-center gap-2 text-sm font-semibold text-[#1d9d68]"><CheckCircle2 size={16} className="fill-[#1d9d68] text-white" /><span>{booking.bookingStatus === 'CONFIRMED' ? 'Booking Confirmed' : booking.bookingStatus}</span></div>
                   </div>
-                  <div className="inline-flex items-center gap-2 self-start rounded-full border border-[#bfe8d6] bg-[#eafaf1] px-3 py-2 text-sm font-semibold text-[#1d9d68]"><CheckCircle2 size={16} className="fill-[#1d9d68] text-white" /><span>{booking.paymentStatus === 'PAID' ? 'Booking Confirmed' : booking.bookingStatus}</span></div>
+                  <div className="inline-flex items-center gap-2 self-start rounded-full border border-[#bfe8d6] bg-[#eafaf1] px-3 py-2 text-sm font-semibold text-[#1d9d68]"><CheckCircle2 size={16} className="fill-[#1d9d68] text-white" /><span>{booking.bookingStatus === 'CONFIRMED' ? 'Booking Confirmed' : booking.bookingStatus}</span></div>
                 </div>
 
                 <div className="mt-4 grid gap-3 border-t border-[#e9e1d9] pt-4 text-sm text-ink-700 sm:grid-cols-3 sm:items-center">
@@ -177,14 +168,14 @@ export default function BuddyBookingsPage({ onBack, onMessage }) {
                   <div className="flex items-center gap-3"><div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#d9ebfb] text-[#3b6ea8]"><ShieldCheck size={16} /></div><p className="font-medium">Customer contact details stay hidden until the meetup for everyone&apos;s safety.</p><ChevronRight size={16} className="ml-auto" /></div>
                 </div>
 
-                {booking.paymentStatus === 'PAID' && !['COMPLETED', 'CANCELLED', 'REJECTED'].includes(booking.bookingStatus) && (
+                {['CONFIRMED', 'ONGOING'].includes(booking.bookingStatus) && (
                   <div className="mt-5 grid gap-3 sm:grid-cols-2">
                     <div className="flex items-center gap-3 rounded-[20px] border border-[#eadfce] bg-[#f8f2ec] p-4"><div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#f5e2d2] text-[#d9864b]"><MapPin size={20} /></div><div><p className="text-xl font-extrabold text-ink-900">Location sharing</p><p className="text-sm text-ink-600">Available 2h before meeting</p></div></div>
                     <div className="flex items-center gap-3 rounded-[20px] border border-[#dbe9f7] bg-[#edf6ff] p-4"><div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#dfeeff] text-[#3a6fb5]"><Lock size={20} /></div><div><p className="text-xl font-extrabold text-ink-900">Meeting status</p><p className="text-sm text-ink-600">{booking.bookingStatus === 'ONGOING' ? 'In progress' : booking.bookingStatus === 'CONFIRMED' ? 'Ready to start' : 'Awaiting acceptance'}</p></div></div>
                   </div>
                 )}
 
-                {booking.paymentStatus === 'PAID' && !['COMPLETED', 'CANCELLED', 'REJECTED'].includes(booking.bookingStatus) && (
+                {['CONFIRMED', 'ONGOING'].includes(booking.bookingStatus) && (
                   <div className="mt-5 grid gap-3 sm:grid-cols-2">
                     <button onClick={() => onMessage(booking._id)} className="inline-flex items-center justify-center gap-3 rounded-[18px] border border-[#d6d2cd] bg-white px-4 py-3 text-base font-semibold text-ink-800 transition hover:bg-ink-50"><MessageCircle size={18} /> Message customer</button>
                     <button onClick={() => showLiveMap(booking)} className="inline-flex items-center justify-center gap-3 rounded-[18px] border border-[#d6d2cd] bg-white px-4 py-3 text-base font-semibold text-ink-800 transition hover:bg-ink-50"><MapPin size={18} /> Show customer location</button>
@@ -209,7 +200,48 @@ export default function BuddyBookingsPage({ onBack, onMessage }) {
                   </form>
                 )}
               </div>
-            )) : <p className="text-sm text-ink-500">No bookings yet.</p>}
+            )) : <p className="text-sm text-ink-500">No upcoming bookings.</p>}
+              </div>
+            </section>
+            <section>
+              <h2 className="font-display text-xl font-bold text-ink-900">Past / cancelled bookings</h2>
+              <BookingListFilters label="Past and cancelled bookings" value={pastFilter} onChange={setPastFilter} dateValue={pastDate} onDateChange={setPastDate} />
+              <div className="mt-4 space-y-4">
+                {groupedBookings.past.length ? groupedBookings.past.map((booking) => (
+                  <div key={booking._id} className="rounded-[28px] border border-[#e6ddd4] bg-[#f7f5f2] p-3 shadow-[0_4px_18px_rgba(17,24,39,0.04)] sm:p-5">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#5a7a9e]">{booking.activityId?.name || booking.activitySlug || 'HAANGO PLAN'}</p>
+                    <h2 className="mt-1 font-display text-2xl font-black text-ink-900">{booking.customerId?.name || 'Customer'}</h2>
+                    <p className="mt-2 text-sm font-semibold text-ink-600">{booking.bookingStatus}</p>
+                    <div className="mt-4 grid gap-3 border-t border-[#e9e1d9] pt-4 text-sm text-ink-700 sm:grid-cols-3">
+                      <div className="flex items-center gap-2"><Calendar size={16} className="text-ink-500" /><span>{formatDate(booking.date)}</span></div>
+                      <div className="flex items-center gap-2"><Clock size={16} className="text-ink-500" /><span>{booking.startTime || 'Scheduled'} · {booking.duration} hrs</span></div>
+                      <div className="flex items-center gap-2"><MapPin size={16} className="text-ink-500" /><span>{booking.meetingLocation}</span></div>
+                    </div>
+                    {['CONFIRMED', 'ONGOING'].includes(booking.bookingStatus) && (
+                      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                        <button onClick={() => onMessage(booking._id)} className="inline-flex items-center justify-center gap-3 rounded-[18px] border border-[#d6d2cd] bg-white px-4 py-3 text-base font-semibold text-ink-800 transition hover:bg-ink-50"><MessageCircle size={18} /> Message customer</button>
+                        <button onClick={() => showLiveMap(booking)} className="inline-flex items-center justify-center gap-3 rounded-[18px] border border-[#d6d2cd] bg-white px-4 py-3 text-base font-semibold text-ink-800 transition hover:bg-ink-50"><MapPin size={18} /> Show customer location</button>
+                      </div>
+                    )}
+                    {openLocationMap === booking._id && <LiveLocationMap locations={locations[booking._id]} onClose={() => { if (locationWatches.current[booking._id]) { navigator.geolocation.clearWatch(locationWatches.current[booking._id]); delete locationWatches.current[booking._id]; } setOpenLocationMap(null); }} onRefresh={async () => { const refreshed = await apiRequest(`/bookings/${booking._id}/locations`); setLocations((current) => ({ ...current, [booking._id]: refreshed })); }} />}
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      {booking.bookingStatus === 'PENDING' && <><button onClick={() => updateBooking(booking._id, 'accept')} disabled={Boolean(updating)} className="btn-primary text-sm"><CheckCircle2 size={16} /> Accept booking</button><button onClick={() => updateBooking(booking._id, 'reject')} disabled={Boolean(updating)} className="btn-ghost text-sm"><XCircle size={16} /> Reject</button></>}
+                      {booking.bookingStatus === 'CONFIRMED' && <button onClick={() => updateBooking(booking._id, 'start')} disabled={Boolean(updating)} className="btn-primary text-sm"><Lock size={16} /> Enter start OTP</button>}
+                      {booking.bookingStatus === 'ONGOING' && <button onClick={() => updateBooking(booking._id, 'complete')} disabled={Boolean(updating)} className="btn-primary text-sm"><CheckCircle2 size={16} /> Enter end OTP</button>}
+                      {booking.bookingStatus === 'COMPLETED' && <button disabled className="btn-ghost text-sm"><CheckCircle2 size={16} /> Booking completed</button>}
+                    </div>
+                    {otpForm?.bookingId === booking._id && (
+                      <form onSubmit={submitOtp} className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-coral-200 bg-coral-50 p-3">
+                        <div className="mr-1"><p className="text-xs font-bold text-coral-700">{otpForm.phase === 'START' ? 'Meeting start OTP' : 'Meeting end OTP'}</p><p className="text-[11px] text-ink-600">Enter the customer&apos;s six-digit code.</p></div>
+                        <input value={otpCode} onChange={(event) => setOtpCode(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" maxLength={6} autoFocus className="w-32 rounded-lg border border-ink-200 bg-white px-3 py-2 text-center font-mono text-lg tracking-[0.2em]" placeholder="000000" />
+                        <button type="submit" disabled={updating === `${otpForm.bookingId}:otp`} className="btn-primary text-sm">{updating === `${otpForm.bookingId}:otp` ? 'Verifying...' : 'Verify OTP'}</button>
+                        <button type="button" onClick={() => setOtpForm(null)} className="btn-ghost text-sm">Cancel</button>
+                      </form>
+                    )}
+                  </div>
+                )) : <p className="text-sm text-ink-500">No past bookings.</p>}
+              </div>
+            </section>
           </div>
         )}
       </div>

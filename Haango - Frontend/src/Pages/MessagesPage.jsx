@@ -671,47 +671,6 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
   }, [activeId, profile?.id]);
 
   useEffect(() => {
-    if (!activeId) return undefined;
-
-    let activePolling = true;
-    const refreshMessages = async () => {
-      try {
-        const latestMessages = await apiRequest(`/messages/${activeId}`);
-        if (activePolling && Array.isArray(latestMessages)) setMessages(normalizeMessageList(latestMessages));
-      } catch (_) {
-        // keep current conversation visible if polling briefly fails
-      }
-    };
-
-    const interval = window.setInterval(refreshMessages, 3000);
-    return () => {
-      activePolling = false;
-      window.clearInterval(interval);
-    };
-  }, [activeId]);
-
-  useEffect(() => {
-    let activePolling = true;
-
-    const refreshConversations = async () => {
-      try {
-        const latestConversations = await apiRequest('/messages/conversations');
-        if (activePolling && Array.isArray(latestConversations)) {
-          setConversations(latestConversations);
-        }
-      } catch (_) {
-        // keep the current conversation list visible if polling briefly fails
-      }
-    };
-
-    const interval = window.setInterval(refreshConversations, 5000);
-    return () => {
-      activePolling = false;
-      window.clearInterval(interval);
-    };
-  }, []);
-
-  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages.length, activeId]);
 
@@ -815,7 +774,7 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
                 <p className="truncate font-display font-semibold text-ink-900">{active.otherUser.name}</p>
                 <BadgeCheck size={14} className="text-teal-500" />
               </div>
-              <p className="text-xs text-ink-400">Paid booking conversation</p>
+              <p className="text-xs text-ink-400">Booking conversation</p>
             </div>
             <div className="ml-auto flex items-center gap-2">
               <button
@@ -838,7 +797,7 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-ink-50">
-            <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+            <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4 pb-28 md:pb-24">
               {messages.map((message) => {
                 const mine = String(message.senderId) === String(profile?.id);
 
@@ -878,7 +837,7 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2 border-t border-ink-100 bg-white px-4 py-3">
+          <div className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] left-0 right-0 z-45 flex items-center gap-2 border-t border-ink-100 bg-white px-4 py-3 shadow-[0_-4px_16px_rgba(23,34,55,0.08)] md:bottom-0 md:z-40">
             <input
               value={input}
               onChange={(event) => setInput(event.target.value)}
@@ -929,8 +888,15 @@ export default function MessagesPage({ activeConversationId, onNavigate, onBack 
     <div className="min-h-screen pt-16 md:pt-18">
       <div className="border-b border-ink-100 bg-white">
         <div className="container-max section-pad py-6">
+          <button
+            type="button"
+            onClick={onBack}
+            className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-ink-500 hover:text-ink-900"
+          >
+            <ArrowLeft size={16} /> Back to dashboard
+          </button>
           <h1 className="font-display text-3xl font-extrabold text-ink-900">Messages</h1>
-          <p className="mt-2 text-ink-500">Messaging is available after a booking payment is completed.</p>
+          <p className="mt-2 text-ink-500">Messaging is available after a buddy confirms your booking.</p>
         </div>
       </div>
 

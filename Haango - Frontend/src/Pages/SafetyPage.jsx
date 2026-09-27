@@ -6,15 +6,15 @@ const safetyTips = [
   'Prefer daytime or early evening plans, and avoid late-night meetings when possible.',
   'Trust your instincts. If something feels wrong, leave immediately and report it.',
   'Keep your personal details private and avoid sharing your address, phone number, or travel details too early.',
-  'Never share your bank details or payment links outside Haango.',
+  'Never share bank details, passwords, or account verification codes.',
 ];
 
 const fraudWarnings = [
-  'Pay only through the Haango app. Do not make payments outside the platform.',
+  'Keep booking communication on-platform and report requests for sensitive account information.',
   'Double-check the profile, photos, and activity details before confirming a booking.',
   'Avoid anyone who rushes you to move the conversation off-platform or to a private location.',
   'Report suspicious behavior immediately so we can review and protect others.',
-  'If someone asks for cash, personal data, or unofficial alternatives, stop and report them.',
+  'If someone asks for personal data or unofficial alternatives, stop and report them.',
 ];
 
 export default function SafetyPage() {

@@ -140,51 +140,9 @@ function AppContent() {
   }, [location.pathname, user]);
 
   useEffect(() => {
-    if (!user || !('Notification' in window)) {
-      browserNotificationIdsRef.current.clear();
-      return undefined;
-    }
-
-    let active = true;
-    if (Notification.permission === 'granted') {
-      registerPushSubscription(apiRequest).catch(() => {});
-    }
-
-    const notifyIfNeeded = async () => {
-      try {
-        if (Notification.permission !== 'granted') return;
-
-        const data = await apiRequest('/notifications?limit=20');
-        const notifications = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
-
-        notifications
-          .filter((notification) => !notification.isRead && ['BOOKING_CONFIRMED', 'NEW_MESSAGE'].includes(notification.type))
-          .forEach((notification) => {
-            const notificationId = String(notification._id || notification.id || `${notification.type}-${notification.createdAt}`);
-            if (browserNotificationIdsRef.current.has(notificationId)) return;
-
-            browserNotificationIdsRef.current.add(notificationId);
-
-            new Notification(notification.title || 'Haango update', {
-              body: notification.message,
-              tag: notificationId,
-              icon: '/favicon.ico',
-            });
-          });
-      } catch {
-        // ignore notification polling failures silently
-      }
-    };
-
-    notifyIfNeeded();
-    const interval = window.setInterval(() => {
-      if (active) notifyIfNeeded();
-    }, 5000);
-
-    return () => {
-      active = false;
-      window.clearInterval(interval);
-    };
+    if (!user || !('Notification' in window) || Notification.permission !== 'granted') return undefined;
+    registerPushSubscription(apiRequest).catch(() => {});
+    return undefined;
   }, [user, profile?.id]);
 
   useEffect(() => {
@@ -224,12 +182,7 @@ function AppContent() {
       refreshUnreadCount();
     });
 
-    const refreshInterval = window.setInterval(() => {
-      refreshUnreadCount();
-    }, 5000);
-
     return () => {
-      window.clearInterval(refreshInterval);
       socket.disconnect();
     };
   }, [profile?.id, user]);

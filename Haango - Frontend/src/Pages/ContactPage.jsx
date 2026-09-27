@@ -55,11 +55,11 @@ export default function ContactPage({ onNavigate }) {
           <div className="mt-6 space-y-4">
             <div className="rounded-2xl border border-ink-200 bg-ink-50 p-4">
               <h2 className="font-display text-lg font-bold text-ink-900">Customer support</h2>
-              <p className="mt-2 text-sm text-ink-600">For booking, payment, account, or safety questions, contact our support team at support@haango.in. Please include your registered email and booking ID when relevant.</p>
+              <p className="mt-2 text-sm text-ink-600">For booking, payment, account, or safety questions, contact our support team at <span className="font-semibold">support@haango.in</span>. Please include your registered email and booking ID when relevant.</p>
             </div>
             <div className="rounded-2xl border border-ink-200 bg-ink-50 p-4">
               <h2 className="font-display text-lg font-bold text-ink-900">Partnerships</h2>
-              <p className="mt-2 text-sm text-ink-600">For business, community, or city partnership enquiries, write to support@haango.in and tell us how you would like to work together.</p>
+              <p className="mt-2 text-sm text-ink-600">For business, community, or city partnership enquiries, write to <span className="font-semibold">haangoofficial@gmail.com</span> and tell us how you would like to work together.</p>
             </div>
           </div>
         </div>

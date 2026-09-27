@@ -115,7 +115,7 @@ export default function HowItWorksPage({ onNavigate }) {
             {[
               'Transparent profile information',
               'Public meeting recommendations',
-              'Payments through the app for safer bookings',
+              'Buddy confirmation before plans are finalized',
             ].map((item) => (
               <div key={item} className="flex items-start gap-3 rounded-2xl bg-white p-4 shadow-soft">
                 <CheckCircle2 className="mt-0.5 text-teal-600" size={18} />

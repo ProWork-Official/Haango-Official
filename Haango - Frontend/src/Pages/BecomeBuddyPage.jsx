@@ -78,8 +78,8 @@ export default function BecomeBuddyPage({ onNavigate }) {
             },
             {
               icon: IndianRupee,
-              title: 'Get paid',
-              desc: 'Earn for your time and companionship. Secure payments through Haango, no chasing.',
+              title: 'Earn from completed plans',
+              desc: 'Build your companion profile and track earnings from completed bookings.',
               color: 'success',
             },
           ].map((b, i) => {

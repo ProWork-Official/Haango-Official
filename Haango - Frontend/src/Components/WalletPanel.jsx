@@ -182,7 +182,7 @@ export default function WalletPanel({ onboardingOnly = false, onSaved }) {
         {!onboardingOnly && <div className="space-y-6">
           <form onSubmit={requestWithdrawal} className="card p-6">
             <div className="mb-5 flex items-center gap-2"><Send size={18} className="text-coral-500" /><h3 className="font-display text-lg font-bold text-ink-900">Withdraw earnings</h3></div>
-            <p className="text-sm text-ink-500">Minimum withdrawal: {currency(summary?.minimumWithdrawal || 300)}. Eligible requests are sent automatically through RazorpayX.</p>
+            <p className="text-sm text-ink-500">Minimum withdrawal: {currency(summary?.minimumWithdrawal || 300)}. Withdrawal requests are reviewed and processed by Haango.</p>
             <label className="mt-4 block text-sm font-medium text-ink-700">Amount<input className={inputClass} type="number" min={summary?.minimumWithdrawal || 300} max={summary?.availableBalance > 0 ? summary.availableBalance : undefined} value={amount} onChange={(event) => { setAmount(event.target.value); setError(''); }} placeholder="Enter amount" required /></label>
             <button type="submit" disabled={withdrawing || !summary?.wallet || Number(summary?.availableBalance || 0) < Number(summary?.minimumWithdrawal || 300)} className="btn-primary mt-5 w-full disabled:opacity-50"><Banknote size={16} /> {withdrawing ? 'Submitting...' : 'Request withdrawal'}</button>
             {!summary?.wallet && <p className="mt-3 text-xs text-amber-600">Save your payout details before requesting a withdrawal.</p>}

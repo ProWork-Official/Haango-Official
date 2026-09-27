@@ -78,9 +78,9 @@ answer:
 "Cancellation depends on the booking and cancellation policy associated with the experience. Always check the applicable terms before confirming a booking.",
 },
 {
-question: "How are payments handled?",
+question: "When is a booking confirmed?",
 answer:
-"Payments can be handled securely through the Haango platform. Depending on the experience, the applicable price and payment details will be shown before you confirm.",
+"A booking request is confirmed when the buddy accepts it. You can follow its status from your Bookings page.",
 },
 {
 question: "Can I report someone?",

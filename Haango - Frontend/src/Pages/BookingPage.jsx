@@ -13,7 +13,6 @@ import {
 import { apiRequest } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { requestLocationPermission } from '../lib/location';
-import haangoLogo from '../Assets/Icon/S_Blue.png';
 
 const steps = ['Activity', 'Schedule', 'Location', 'Review', 'Confirm'];
 
@@ -109,16 +108,16 @@ function getCityLocationPool(cityName) {
   return suggestedLocations.filter((place) => place.city === normalizeLocationCity(cityName));
 }
 
-function loadRazorpayScript() {
-  if (window.Razorpay) return Promise.resolve(true);
+function getPaymentRetryDraft(buddyId) {
+  const params = new URLSearchParams(window.location.search);
+  if (!['failed', 'verification-failed'].includes(params.get('payment'))) return null;
 
-  return new Promise((resolve) => {
-    const script = document.createElement('script');
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
-    document.body.appendChild(script);
-  });
+  try {
+    const draft = JSON.parse(sessionStorage.getItem(`haango_payment_draft_${buddyId}`) || 'null');
+    return draft?.buddyId === String(buddyId) ? draft : null;
+  } catch {
+    return null;
+  }
 }
 
 export default function BookingPage({
@@ -133,27 +132,44 @@ export default function BookingPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const dayOptions = getDayOptions();
+  const [paymentRetryDraft] = useState(() => getPaymentRetryDraft(buddyId));
 
-  const [step, setStep] = useState(() => (
-    new URLSearchParams(window.location.search).get('resume') === 'confirm' ? 4 : 0
-  ));
-  const [activity, setActivity] = useState(null);
-  const [day, setDay] = useState(dayOptions[0].label);
-  const [bookingDate, setBookingDate] = useState(dayOptions[0].value);
-  const [time, setTime] = useState(timeSlots[5]);
-  const [duration, setDuration] = useState(2);
-  const [location, setLocation] = useState('');
+  const [step, setStep] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('resume') === 'confirm' || ['failed', 'verification-failed', 'refund-pending'].includes(params.get('payment')) ? 4 : 0;
+  });
+  const [activity, setActivity] = useState(paymentRetryDraft?.activity || null);
+  const [day, setDay] = useState(paymentRetryDraft?.day || dayOptions[0].label);
+  const [bookingDate, setBookingDate] = useState(paymentRetryDraft?.date || dayOptions[0].value);
+  const [time, setTime] = useState(paymentRetryDraft?.startTime || timeSlots[5]);
+  const [duration, setDuration] = useState(() => {
+    const draftDuration = Number(paymentRetryDraft?.duration);
+    if (Number.isInteger(draftDuration) && draftDuration >= 1 && draftDuration <= 8) return draftDuration;
+    const returnedDuration = Number(new URLSearchParams(window.location.search).get('duration'));
+    return Number.isInteger(returnedDuration) && returnedDuration >= 1 && returnedDuration <= 8
+      ? returnedDuration
+      : 2;
+  });
+  const [location, setLocation] = useState(paymentRetryDraft?.meetingLocation || '');
   const [customLocation, setCustomLocation] = useState('');
   const [visibleLocations, setVisibleLocations] = useState([]);
   const [showCustomLocation, setShowCustomLocation] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
+  const [confirmed] = useState(() => (
+    new URLSearchParams(window.location.search).get('payment') === 'success'
+  ));
   const [submitting, setSubmitting] = useState(false);
-  const [paymentError, setPaymentError] = useState('');
-  const [couponCode, setCouponCode] = useState('');
-  const [couponDiscount, setCouponDiscount] = useState(0);
+  const [couponCode, setCouponCode] = useState(paymentRetryDraft?.couponCode || '');
+  const [couponDiscount, setCouponDiscount] = useState(Number(paymentRetryDraft?.couponDiscount || 0));
   const [couponMessage, setCouponMessage] = useState('');
   const [applyingCoupon, setApplyingCoupon] = useState(false);
-  const [walletBalance, setWalletBalance] = useState(0);
+  const [paymentReturnStatus, setPaymentReturnStatus] = useState(() => (
+    new URLSearchParams(window.location.search).get('payment') || ''
+  ));
+  const [paymentReturnAmount] = useState(() => {
+    const value = new URLSearchParams(window.location.search).get('paymentAmount');
+    const amount = Number(value);
+    return value !== null && Number.isFinite(amount) && amount >= 0 ? amount : null;
+  });
 
   useEffect(() => {
     if (!buddy) return;
@@ -164,6 +180,10 @@ export default function BookingPage({
     const firstPick = nextVisible[0]?.name || '';
 
     setVisibleLocations(nextVisible);
+    if (paymentRetryDraft?.meetingLocation && String(paymentRetryDraft.buddyId) === String(buddy.id)) {
+      setLocation(paymentRetryDraft.meetingLocation);
+      return;
+    }
     setCustomLocation('');
     setShowCustomLocation(false);
     setLocation(firstPick);
@@ -227,7 +247,8 @@ export default function BookingPage({
         });
         setActivities(availableActivities);
 
-        const firstActivity = availableActivities[0];
+        const restoredActivity = availableActivities.find((item) => item.slug === paymentRetryDraft?.activity);
+        const firstActivity = restoredActivity || availableActivities[0];
         setActivity(firstActivity?.slug || null);
       } catch (loadError) {
         console.error('Failed to load booking data:', loadError);
@@ -240,14 +261,6 @@ export default function BookingPage({
     loadBookingData();
     return () => { active = false; };
   }, [buddyId]);
-
-  useEffect(() => {
-    if (!user) return undefined;
-    apiRequest('/customer-wallet')
-      .then((wallet) => setWalletBalance(Number(wallet?.balance || 0)))
-      .catch(() => setWalletBalance(0));
-    return undefined;
-  }, [user]);
 
   if (loading) {
     return <div className="pt-20 text-center text-ink-500">Loading booking details...</div>;
@@ -319,7 +332,7 @@ export default function BookingPage({
           </h1>
 
           <p className="mt-4 text-lg text-ink-500">
-            Your plan with {buddy.name} is confirmed.
+            Your booking request for {buddy.name} has been sent. They need to accept it before the plan is confirmed.
           </p>
 
           <div className="card p-6 mt-8 text-left">
@@ -372,18 +385,20 @@ export default function BookingPage({
 
             <div className="mt-4 pt-4 border-t border-[#EEEEEF] flex items-center justify-between">
               <span className="text-sm text-ink-500">
-                Total paid
+                {paymentReturnStatus === 'success' ? 'Amount paid' : 'Estimated total'}
               </span>
 
               <span className="font-display font-bold text-lg text-ink-900">
-                ₹{payableTotal.toLocaleString('en-IN')}
+                ₹{(paymentReturnStatus === 'success' && paymentReturnAmount !== null
+                  ? paymentReturnAmount
+                  : payableTotal).toLocaleString('en-IN')}
               </span>
             </div>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 mt-6">
             <button
-              onClick={() => onNavigate('dashboard')}
+              onClick={() => onNavigate('bookings')}
               className="btn-secondary w-full"
             >
               <CalendarDays size={18} />
@@ -822,7 +837,6 @@ export default function BookingPage({
                     </div>
                     {couponMessage && <p className={`mt-2 text-xs ${couponDiscount > 0 ? 'text-success-600' : 'text-red-500'}`}>{couponMessage}</p>}
                   </div>
-                  {walletBalance > 0 && <p className="mb-5 rounded-2xl bg-teal-50 px-4 py-3 text-sm text-teal-700">Wallet balance available: ₹{walletBalance.toLocaleString('en-IN')}</p>}
                   {showPricingBreakdown && (
                     <div className="space-y-3 mb-5">
                       <div className="flex justify-between text-sm">
@@ -860,8 +874,26 @@ export default function BookingPage({
                     </span>
                   </div>
                   {couponDiscount > 0 && <div className="mt-3 flex justify-between text-sm text-success-600"><span>Coupon discount</span><span>-₹{couponDiscount.toLocaleString('en-IN')}</span></div>}
+                  <p className="mt-4 text-xs leading-relaxed text-ink-500">
+                    Your payment includes the buddy fee and Haango fee. The buddy receives 80% of the buddy fee after the session end code is verified.
+                  </p>
                 </div>
 
+                {paymentReturnStatus === 'failed' && (
+                  <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">
+                    Payment wasn't completed. You can try again; no booking request was sent.
+                  </p>
+                )}
+                {paymentReturnStatus === 'refund-pending' && (
+                  <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800" role="alert">
+                    Your payment was received after the booking hold expired. The time is no longer reserved; please contact Haango support for refund assistance before trying again.
+                  </p>
+                )}
+                {paymentReturnStatus === 'verification-failed' && (
+                  <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800" role="alert">
+                    {error || 'We could not verify this payment. Check your bookings or contact support before paying again.'}
+                  </p>
+                )}
                 <button
                   onClick={async () => {
                     if (!user) {
@@ -871,11 +903,20 @@ export default function BookingPage({
 
                     setSubmitting(true);
                     setError('');
-                    setPaymentError('');
-
                     try {
+                      sessionStorage.setItem(`haango_payment_draft_${buddy.id}`, JSON.stringify({
+                        buddyId: String(buddy.id),
+                        activity: activityObj?.slug || '',
+                        day,
+                        date: bookingDate,
+                        startTime: time,
+                        duration,
+                        meetingLocation: location,
+                        couponCode: couponCode.trim(),
+                        couponDiscount,
+                      }));
                       await requestLocationPermission();
-                      const booking = await apiRequest('/bookings', {
+                      const checkout = await apiRequest('/bookings', {
                         method: 'POST',
                         body: JSON.stringify({
                           buddyId: buddy.id,
@@ -888,60 +929,19 @@ export default function BookingPage({
                         }),
                       });
 
-                      const order = await apiRequest('/payments/create-order', {
-                        method: 'POST',
-                        body: JSON.stringify({ bookingId: booking._id || booking.id }),
+                      const form = document.createElement('form');
+                      form.method = 'POST';
+                      form.action = checkout.actionUrl;
+                      form.hidden = true;
+                      Object.entries(checkout.fields || {}).forEach(([name, value]) => {
+                        const input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = name;
+                        input.value = String(value);
+                        form.appendChild(input);
                       });
-                      if (order.walletOnly) {
-                        setConfirmed(true);
-                        setSubmitting(false);
-                        return;
-                      }
-                      const scriptLoaded = await loadRazorpayScript();
-                      if (!scriptLoaded) throw new Error('Unable to load the Razorpay checkout.');
-
-                      const razorpay = new window.Razorpay({
-                        key: order.keyId,
-                        amount: order.amount,
-                        currency: order.currency,
-                        name: "Haango - Don't Go Alone",
-                        image: new URL(haangoLogo, window.location.origin).href,
-                        description: `${activityObj.name} with ${buddy.name}`,
-                        order_id: order.id,
-                        prefill: {
-                          name: profile?.full_name || profile?.name || user?.name || '',
-                          email: profile?.email || user?.email || '',
-                        },
-                        handler: async (paymentResponse) => {
-                          try {
-                            await apiRequest('/payments/verify', {
-                              method: 'POST',
-                              body: JSON.stringify({
-                                bookingId: booking._id || booking.id,
-                                ...paymentResponse,
-                              }),
-                            });
-                            setConfirmed(true);
-                          } catch (verificationError) {
-                            setPaymentError(verificationError.message || 'Payment verification failed.');
-                          } finally {
-                            setSubmitting(false);
-                          }
-                        },
-                        modal: {
-                          confirm_close: true,
-                          ondismiss: () => setSubmitting(false),
-                        },
-                        theme: {
-                          color: '#ff6b4a',
-                          backdrop_color: '#fffaf5',
-                        },
-                      });
-                      razorpay.on('payment.failed', (response) => {
-                        setPaymentError(response.error?.description || 'Payment failed. Please try again.');
-                        setSubmitting(false);
-                      });
-                      razorpay.open();
+                      document.body.appendChild(form);
+                      form.submit();
                     } catch (submitError) {
                       setError(submitError.message || 'Unable to create booking.');
                       setSubmitting(false);
@@ -950,7 +950,7 @@ export default function BookingPage({
                   disabled={submitting}
                   className="btn-primary w-full mt-6 text-base py-4 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {submitting ? 'Creating booking...' : `Confirm & Pay ₹${payableTotal.toLocaleString('en-IN')}`}
+                  {submitting ? 'Opening PayU...' : `Pay ₹${payableTotal.toLocaleString('en-IN')} with PayU`}
                 </button>
 
                 <button
@@ -963,7 +963,6 @@ export default function BookingPage({
                 </button>
 
                 {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
-                {paymentError && <p className="mt-3 text-sm text-red-500">{paymentError}</p>}
               </div>
             )}
 

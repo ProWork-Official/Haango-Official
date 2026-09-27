@@ -15,23 +15,6 @@ import StarRating from '../Components/StarRating';
 import { ProfileSkeleton } from '../Components/Skeletons';
 import { apiRequest as sharedApiRequest } from '../lib/api';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5005/api';
-
-async function apiRequest(path) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    credentials: 'include',
-    cache: 'no-store',
-    headers: { 'Content-Type': 'application/json' },
-  });
-
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new Error(payload?.message || 'Request failed');
-  }
-
-  return payload?.data ?? payload;
-}
-
 function getAgeFromDate(dateValue) {
   if (!dateValue) return 0;
   const birthDate = new Date(dateValue);
@@ -65,7 +48,7 @@ export default function ProfilePage({
       setActiveImage(0);
 
       try {
-        const response = await apiRequest(`/buddies/${buddyId}`);
+        const response = await sharedApiRequest(`/buddies/${buddyId}`);
         if (!active) return;
 
         const buddyData = response || {};
@@ -500,8 +483,8 @@ export default function ProfilePage({
                     </p>
 
                     <p className="text-xs text-teal-600 mt-1 leading-relaxed">
-                      Always meet in public places. Never share
-                      payment outside Haango. Report any concerns
+                      Always meet in public places. Keep personal
+                      details private and report any concerns
                       immediately.
                     </p>
                   </div>
