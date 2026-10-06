@@ -27,9 +27,9 @@ export async function sendSignupOtp(req, res, next) {
 
 export async function signup(req, res, next) {
   try {
-    const { name, email, phone, password, role, otp, signupCode } = req.body;
+    const { name, email, phone, password, role, otp, signupCode, whatsappMarketingOptIn } = req.body;
     if (role === 'ADMIN') throw badRequest('Cannot self-register as admin', 'INVALID_ROLE');
-    const { user, accessToken, refreshToken } = await signupUser({ name, email, phone, password, role, otp, signupCode });
+    const { user, accessToken, refreshToken } = await signupUser({ name, email, phone, password, role, otp, signupCode, whatsappMarketingOptIn });
     issueAuthCookies(res, accessToken, refreshToken);
     res.status(201).json(success({ user: user.toSafeObject(), token: accessToken, refreshToken }));
   } catch (err) {

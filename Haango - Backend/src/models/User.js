@@ -21,6 +21,9 @@ const userSchema = new mongoose.Schema(
       index: true,
       match: [/^\+?[\d\s-]{10,15}$/, 'Invalid phone number'],
     },
+    whatsappMarketingOptIn: { type: Boolean, default: false, index: true },
+    whatsappMarketingOptInAt: { type: Date, default: null },
+    whatsappMarketingOptOutAt: { type: Date, default: null },
     passwordHash: { type: String, required: true, select: false },
     role: {
       type: String,

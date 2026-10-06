@@ -9,6 +9,7 @@ export const createBookingValidator = [
   body('meetingLocation').trim().isLength({ min: 2, max: 200 }).withMessage('Meeting location required'),
   body('customerNotes').optional().trim().isLength({ max: 1000 }),
   body('couponCode').optional().trim().isLength({ max: 50 }),
+  body('useWallet').optional().isBoolean(),
 ];
 
 export const createReviewValidator = [
@@ -62,4 +63,17 @@ export const buddyProfileValidator = [
   body('showOnFindCompanions').optional().isBoolean(),
   body('isAvailable').optional().isBoolean(),
   body('girlsOnly').optional().isBoolean(),
+];
+
+export const adminBuddyUpdateValidator = [
+  ...buddyProfileValidator,
+  body('profileImages').optional().isArray({ min: 3 }).withMessage('At least 3 profile photos are required'),
+  body('profileImages.*').optional().isString().isLength({ min: 1, max: 2_000_000 }),
+  body('languages.*').optional().isString().trim().isLength({ min: 1, max: 50 }),
+  body('hobbies.*').optional().isString().trim().isLength({ min: 1, max: 100 }),
+  body('availability.*.isAvailable').optional().isBoolean(),
+  body('user').optional().isObject().withMessage('Account details must be an object'),
+  body('user.name').optional().trim().isLength({ min: 2, max: 100 }),
+  body('user.email').optional().isEmail().isLength({ max: 254 }),
+  body('user.phone').optional().matches(/^\+?[\d\s-]{10,15}$/),
 ];

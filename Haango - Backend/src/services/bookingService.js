@@ -1,7 +1,7 @@
 import Booking from '../models/Booking.js';
 import BuddyProfile from '../models/BuddyProfile.js';
 import Activity from '../models/Activity.js';
-import { calculateBookingPrice } from './pricingService.js';
+import { calculateBookingPrice, calculateCheckoutAmounts } from './pricingService.js';
 import { notFound, badRequest, conflict, forbidden } from '../utils/errors.js';
 import { generateBookingId } from '../utils/helpers.js';
 import { env } from '../config/environment.js';
@@ -11,9 +11,9 @@ import CancellationRequest from '../models/CancellationRequest.js';
 import User from '../models/User.js';
 import { sendOtpEmail } from './emailService.js';
 import LocationAccessLog from '../models/LocationAccessLog.js';
-import { recordAdminAction } from './adminAuditService.js';
 import { findAvailableCoupon } from './couponService.js';
 import { settleCompletedBookingPayout } from './walletService.js';
+import { ensureCustomerWallet, reserveBookingWallet, releaseBookingWallet } from './customerWalletService.js';
 
 const LOCATION_RETENTION_MS = 24 * 60 * 60 * 1000;
 const LOCATION_STALE_MS = 2 * 60 * 1000;
@@ -99,17 +99,60 @@ function clearBookingLocations(booking) {
 }
 
 async function expirePaymentHolds(scope = {}) {
-  await Booking.updateMany({
-    ...scope,
+  const now = new Date();
+  const pendingExpiry = {
     bookingStatus: 'PAYMENT_PENDING',
-    'payment.expiresAt': { $lte: new Date() },
-  }, {
-    $set: {
-      bookingStatus: 'CANCELLED',
-      'payment.status': 'FAILED',
-      'payment.failureReason': 'Payment session expired',
-    },
-  });
+    'payment.status': 'PENDING',
+    'payment.expiresAt': { $lte: now },
+  };
+  const retryWalletRelease = {
+    'payment.walletStatus': 'HELD',
+    'payment.status': { $in: ['FAILED', 'ABANDONED', 'REFUND_PENDING'] },
+  };
+  const candidates = await Booking.find({ ...scope, $or: [pendingExpiry, retryWalletRelease] });
+
+  for (const candidate of candidates) {
+    let booking = candidate;
+    if (candidate.bookingStatus === 'PAYMENT_PENDING' && candidate.payment.status === 'PENDING' && candidate.payment.expiresAt <= now) {
+      booking = await Booking.findOneAndUpdate(
+        { _id: candidate._id, bookingStatus: 'PAYMENT_PENDING', 'payment.status': 'PENDING', 'payment.expiresAt': { $lte: now } },
+        { $set: { bookingStatus: 'CANCELLED', 'payment.status': 'FAILED', 'payment.failureReason': 'Payment session expired' } },
+        { new: true },
+      );
+      if (!booking) continue;
+    }
+    await releasePendingBookingWallet(booking);
+  }
+}
+
+export async function expireStalePaymentHolds() {
+  await expirePaymentHolds();
+}
+
+async function releasePendingBookingWallet(booking) {
+  if (booking?.payment?.walletStatus !== 'HELD') return;
+  await releaseBookingWallet(booking.customerId, booking._id, booking.payment.walletAmount);
+  await Booking.updateOne(
+    { _id: booking._id, 'payment.walletStatus': 'HELD' },
+    { $set: { 'payment.walletStatus': 'RELEASED' } },
+  );
+}
+
+export async function releasePaymentWallet(booking) {
+  return releasePendingBookingWallet(booking);
+}
+
+export async function failPaymentBooking(bookingId, failureReason = 'Payment failed') {
+  let booking = await Booking.findOneAndUpdate(
+    { _id: bookingId, bookingStatus: 'PAYMENT_PENDING', 'payment.status': 'PENDING' },
+    { $set: { bookingStatus: 'CANCELLED', 'payment.status': 'FAILED', 'payment.failureReason': failureReason } },
+    { new: true },
+  );
+  if (!booking) booking = await Booking.findById(bookingId);
+  if (booking && ['FAILED', 'ABANDONED', 'REFUND_PENDING'].includes(booking.payment.status)) {
+    await releasePendingBookingWallet(booking);
+  }
+  return booking;
 }
 
 export async function purgeExpiredBookingLocations() {
@@ -163,6 +206,19 @@ export async function createBooking(customerId, data, { paymentPending = false }
     ? await findAvailableCoupon(data.couponCode, customer, 'BOOKING')
     : null;
   const couponDiscount = coupon ? Math.min(coupon.coupon.amount, totalAmount) : 0;
+  const customerWallet = paymentPending && data.useWallet === true
+    ? await ensureCustomerWallet(customerId)
+    : null;
+  const checkoutAmounts = calculateCheckoutAmounts(
+    totalAmount,
+    couponDiscount,
+    customerWallet?.balance || 0,
+    data.useWallet === true,
+  );
+  const { walletAmount, paymentAmount } = checkoutAmounts;
+  const provider = paymentAmount > 0
+    ? walletAmount > 0 ? 'WALLET_AND_PAYU' : 'PAYU'
+    : walletAmount > 0 ? 'WALLET' : 'COUPON';
 
   const booking = await Booking.create({
     bookingId: generateBookingId(),
@@ -184,13 +240,32 @@ export async function createBooking(customerId, data, { paymentPending = false }
     bookingStatus: paymentPending ? 'PAYMENT_PENDING' : 'PENDING',
     ...(paymentPending ? {
       payment: {
-        provider: 'PAYU',
+        provider,
         status: 'PENDING',
-        amount: Math.max(0, totalAmount - couponDiscount),
+        amount: paymentAmount,
+        walletAmount,
+        walletStatus: walletAmount > 0 ? 'HELD' : 'NONE',
         expiresAt: new Date(Date.now() + env.bookingPaymentExpiryMinutes * 60 * 1000),
       },
     } : {}),
   });
+
+  if (walletAmount > 0) {
+    try {
+      await reserveBookingWallet(customerId, booking._id, walletAmount);
+    } catch (error) {
+      await Booking.deleteOne({ _id: booking._id, 'payment.status': 'PENDING' });
+      throw error;
+    }
+  }
+
+  if (paymentPending && paymentAmount === 0) {
+    booking.bookingStatus = 'CONFIRMED';
+    booking.payment.status = 'PAID';
+    booking.payment.walletStatus = walletAmount > 0 ? 'CAPTURED' : 'NONE';
+    booking.payment.paidAt = new Date();
+    await booking.save();
+  }
 
   return booking;
 }
@@ -279,7 +354,10 @@ export async function clearPendingPaymentBooking(bookingId, customerId) {
     { new: true, runValidators: true },
   );
 
-  if (booking) return booking;
+  if (booking) {
+    await releasePendingBookingWallet(booking);
+    return booking;
+  }
 
   const existing = await Booking.findById(bookingId).select('customerId bookingStatus payment.status');
   if (!existing) throw notFound('Booking not found');
@@ -401,7 +479,7 @@ export async function requestCancellation(bookingId, userId, reason, details) {
 export async function getCancellationRequests(status) {
   return CancellationRequest.find(status ? { status } : {}).populate('bookingId requesterId', 'bookingId date startTime bookingStatus name email').sort({ createdAt: -1 });
 }
-export async function reviewCancellation(requestId, adminId, status, adminNotes = '', requestContext) {
+export async function reviewCancellation(requestId, adminId, status, adminNotes = '') {
   const request = await CancellationRequest.findById(requestId).populate('bookingId');
   if (!request) throw notFound('Cancellation request not found');
   if (!['APPROVED', 'REJECTED', 'CANCELLED'].includes(status)) throw badRequest('Invalid cancellation decision');
@@ -412,7 +490,6 @@ export async function reviewCancellation(requestId, adminId, status, adminNotes 
     await request.bookingId.save();
   }
   await request.save();
-  await recordAdminAction({ actor: await User.findById(adminId), request: requestContext, action: 'CANCELLATION_DECISION', targetType: 'CancellationRequest', targetId: request._id, metadata: { status, bookingId: request.bookingId._id } });
   return request;
 }
 export async function updateParticipantLocation(bookingId, userId, location, request) {

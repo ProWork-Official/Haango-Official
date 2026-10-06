@@ -1,4 +1,5 @@
 import SupportRequest from '../models/SupportRequest.js';
+import User from '../models/User.js';
 import { badRequest, conflict, notFound } from '../utils/errors.js';
 
 export const SUPPORT_LOCK_HOURS = 48;
@@ -48,9 +49,48 @@ export async function getUserSupportRequests(userId) {
   return SupportRequest.find({ createdBy: userId }).sort({ createdAt: -1 }).lean();
 }
 
-export async function getAllSupportRequests(status, page = 1, limit = 20) {
+export function getIndiaDayBounds(now = new Date()) {
+  const indiaOffsetMs = 5.5 * 60 * 60 * 1000;
+  const indiaDate = new Date(new Date(now).getTime() + indiaOffsetMs);
+  const start = new Date(Date.UTC(indiaDate.getUTCFullYear(), indiaDate.getUTCMonth(), indiaDate.getUTCDate()) - indiaOffsetMs);
+  return { start, end: new Date(start.getTime() + 24 * 60 * 60 * 1000) };
+}
+
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export async function getSupportRequestStats(now = new Date()) {
+  const { start, end } = getIndiaDayBounds(now);
+  const [totalTickets, inReviewTickets, resolvedTickets, raisedTodayTickets] = await Promise.all([
+    SupportRequest.countDocuments(),
+    SupportRequest.countDocuments({ status: 'IN_REVIEW' }),
+    SupportRequest.countDocuments({ status: 'RESOLVED' }),
+    SupportRequest.countDocuments({ createdAt: { $gte: start, $lt: end } }),
+  ]);
+
+  return { totalTickets, inReviewTickets, resolvedTickets, raisedTodayTickets };
+}
+
+export async function getAllSupportRequests({ status, raisedToday, search } = {}, page = 1, limit = 20) {
   const query = {};
   if (status) query.status = status;
+  if (raisedToday) {
+    const { start, end } = getIndiaDayBounds();
+    query.createdAt = { $gte: start, $lt: end };
+  }
+  if (search) {
+    const searchRegex = new RegExp(escapeRegex(search), 'i');
+    const matchingUsers = await User.find({ $or: [{ name: searchRegex }, { email: searchRegex }] }).distinct('_id');
+    query.$and = [{
+      $or: [
+        { fullName: searchRegex },
+        { problemDescription: searchRegex },
+        { adminReply: searchRegex },
+        ...(matchingUsers.length ? [{ createdBy: { $in: matchingUsers } }] : []),
+      ],
+    }];
+  }
 
   const skip = (page - 1) * limit;
   const [requests, total] = await Promise.all([

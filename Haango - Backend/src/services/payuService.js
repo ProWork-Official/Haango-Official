@@ -76,39 +76,74 @@ export function verifyPayuResponseHash(fields, salt) {
 }
 
 export async function createBookingCheckout(customer, data) {
-  const { key, salt, actionUrl } = getPayuConfig();
   const currentCustomer = await User.findById(customer._id).select('name email phone');
   if (!currentCustomer) throw notFound('Customer not found');
   const booking = await bookingService.createBooking(customer._id, data, { paymentPending: true });
 
+  if (booking.payment.amount === 0) {
+    await sendConfirmationEmails(booking);
+    return {
+      walletOnly: true,
+      bookingId: booking._id,
+      amount: booking.payment.walletAmount,
+      currency: 'INR',
+    };
+  }
+
   const txnid = `HA${crypto.randomBytes(10).toString('hex')}`;
-  const fields = {
-    key,
-    txnid,
-    amount: amountString(booking.payment.amount),
-    productinfo: `Haango booking ${booking.bookingId}`,
-    firstname: currentCustomer.name.trim().split(/\s+/)[0],
-    email: currentCustomer.email,
-    phone: currentCustomer.phone.replace(/\D/g, '').slice(-10),
-    surl: getClientBookingUrl(booking.buddyProfileId),
-    furl: getClientBookingUrl(booking.buddyProfileId),
-    udf1: String(booking._id),
-    udf2: booking.bookingId,
-    udf3: String(booking.buddyProfileId),
-    udf4: '',
-    udf5: '',
-  };
+  try {
+    const { key, salt, actionUrl } = getPayuConfig();
+    const fields = {
+      key,
+      txnid,
+      amount: amountString(booking.payment.amount),
+      productinfo: `Haango booking ${booking.bookingId}`,
+      firstname: currentCustomer.name.trim().split(/\s+/)[0],
+      email: currentCustomer.email,
+      phone: currentCustomer.phone.replace(/\D/g, '').slice(-10),
+      surl: getClientBookingUrl(booking.buddyProfileId),
+      furl: getClientBookingUrl(booking.buddyProfileId),
+      udf1: String(booking._id),
+      udf2: booking.bookingId,
+      udf3: String(booking.buddyProfileId),
+      udf4: '',
+      udf5: '',
+    };
 
-  booking.payment.txnId = txnid;
-  await booking.save();
+    booking.payment.txnId = txnid;
+    await booking.save();
 
-  return {
-    actionUrl,
-    fields: { ...fields, hash: createPayuRequestHash(fields, salt) },
-    bookingId: booking._id,
-    amount: booking.payment.amount,
-    currency: 'INR',
-  };
+    return {
+      actionUrl,
+      fields: { ...fields, hash: createPayuRequestHash(fields, salt) },
+      bookingId: booking._id,
+      amount: booking.payment.amount,
+      walletAmount: booking.payment.walletAmount,
+      currency: 'INR',
+    };
+  } catch (error) {
+    await bookingService.failPaymentBooking(booking._id, 'Payment checkout could not be initialized');
+    throw error;
+  }
+}
+
+async function sendConfirmationEmails(booking) {
+  try {
+    const [customer, buddy, buddyProfile, activity] = await Promise.all([
+      User.findById(booking.customerId).select('name email'),
+      User.findById(booking.buddyId).select('name email'),
+      BuddyProfile.findById(booking.buddyProfileId).select('displayName'),
+      Activity.findById(booking.activityId).select('name'),
+    ]);
+    await sendBookingConfirmationEmails({
+      customer: customer?.toObject() || {},
+      buddy: { ...(buddy?.toObject() || {}), name: buddyProfile?.displayName || buddy?.name || 'Buddy' },
+      activity: activity?.name,
+      booking,
+    });
+  } catch (emailError) {
+    console.error('Booking confirmation email delivery failed:', emailError.message);
+  }
 }
 
 export async function processPayuReturn(fields) {
@@ -136,53 +171,31 @@ export async function processPayuReturn(fields) {
       booking.payment.status = 'REFUND_PENDING';
       booking.payment.failureReason = 'Payment arrived after the booking reservation expired; refund review is required';
       booking.bookingStatus = 'CANCELLED';
+      await bookingService.releasePaymentWallet(booking);
+      booking.payment.walletStatus = booking.payment.walletAmount > 0 ? 'RELEASED' : 'NONE';
     } else {
       booking.payment.status = 'PAID';
       booking.payment.failureReason = '';
       booking.bookingStatus = 'CONFIRMED';
+      if (booking.payment.walletStatus === 'HELD') booking.payment.walletStatus = 'CAPTURED';
       newlyPaid = true;
     }
     await booking.save();
   }
 
   if (newlyPaid) {
-    try {
-      const [customer, buddy, buddyProfile, activity] = await Promise.all([
-        User.findById(booking.customerId).select('name email'),
-        User.findById(booking.buddyId).select('name email'),
-        BuddyProfile.findById(booking.buddyProfileId).select('displayName'),
-        Activity.findById(booking.activityId).select('name'),
-      ]);
-      await sendBookingConfirmationEmails({
-        customer: customer?.toObject() || {},
-        buddy: {
-          ...(buddy?.toObject() || {}),
-          name: buddyProfile?.displayName || buddy?.name || 'Buddy',
-        },
-        activity: activity?.name,
-        booking,
-      });
-    } catch (emailError) {
-      console.error('Booking confirmation email delivery failed:', emailError.message);
-    }
+    await sendConfirmationEmails(booking);
   }
 
   if (!paid && !booking.isCleared && !['PAID', 'REFUND_PENDING'].includes(booking.payment.status)) {
-    const deletion = await Booking.deleteOne({
-      _id: booking._id,
-      isCleared: { $ne: true },
-      'payment.status': { $nin: ['PAID', 'REFUND_PENDING'] },
-    });
-    if (deletion.deletedCount) return { booking, paid: false, verified: true };
+    const failedBooking = await bookingService.failPaymentBooking(booking._id, 'PayU payment failed');
+    return { booking: failedBooking || booking, paid: false, verified: true };
+  }
 
-    const latestBooking = await Booking.findById(booking._id);
-    if (['PAID', 'REFUND_PENDING'].includes(latestBooking?.payment.status)) {
-      return {
-        booking: latestBooking,
-        paid: latestBooking.payment.status === 'PAID',
-        verified: true,
-      };
-    }
+  if (!paid && booking.payment.walletStatus === 'HELD') {
+    await bookingService.releasePaymentWallet(booking);
+    booking.payment.walletStatus = 'RELEASED';
+    await booking.save();
   }
 
   return { booking, paid: booking.payment.status === 'PAID', verified: true };

@@ -30,6 +30,7 @@ export async function getProfileSummary(userId) {
       email: user.email,
       phone: user.phone,
       role: user.role,
+      whatsappMarketingOptIn: Boolean(user.whatsappMarketingOptIn),
       dateOfBirth: user.dateOfBirth,
       hobbies: user.hobbies || [],
       address: user.address || '',
@@ -44,7 +45,7 @@ export async function updateProfile(userId, payload = {}) {
   const user = await User.findById(userId);
   if (!user) throw badRequest('User not found', 'USER_NOT_FOUND');
 
-  const { name, gender, dateOfBirth, hobbies, address } = payload;
+  const { name, gender, dateOfBirth, hobbies, address, whatsappMarketingOptIn } = payload;
 
   if (typeof name === 'string' && name.trim()) user.name = name.trim();
   if (gender) user.gender = gender;
@@ -58,6 +59,11 @@ export async function updateProfile(userId, payload = {}) {
   }
 
   if (typeof address === 'string') user.address = address.trim();
+  if (typeof whatsappMarketingOptIn === 'boolean' && whatsappMarketingOptIn !== user.whatsappMarketingOptIn) {
+    user.whatsappMarketingOptIn = whatsappMarketingOptIn;
+    user.whatsappMarketingOptInAt = whatsappMarketingOptIn ? new Date() : user.whatsappMarketingOptInAt;
+    user.whatsappMarketingOptOutAt = whatsappMarketingOptIn ? null : new Date();
+  }
 
   user.profileCompletion = computeProfileCompletion(user);
   await user.save();

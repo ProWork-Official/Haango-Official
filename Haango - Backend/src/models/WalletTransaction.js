@@ -4,7 +4,7 @@ const walletTransactionSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     type: { type: String, enum: ['CREDIT', 'DEBIT'], required: true },
-    reason: { type: String, enum: ['CANCELLATION_CREDIT', 'REFERRAL_REWARD', 'COUPON_CREDIT'], required: true },
+    reason: { type: String, enum: ['CANCELLATION_CREDIT', 'REFERRAL_REWARD', 'COUPON_CREDIT', 'ADMIN_ADJUSTMENT', 'BOOKING_PAYMENT', 'BOOKING_REFUND'], required: true },
     amount: { type: Number, required: true, min: 1 },
     bookingId: { type: mongoose.Schema.Types.ObjectId, ref: 'Booking', default: null, index: true },
     referenceId: { type: String, required: true, unique: true, index: true },

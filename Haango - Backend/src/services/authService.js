@@ -176,7 +176,7 @@ export async function requestSignupOtp({ name, email, phone, password, role, sig
   };
 }
 
-export async function signupUser({ name, email, phone, password, role, otp, signupCode, referralCode, couponCode }) {
+export async function signupUser({ name, email, phone, password, role, otp, signupCode, referralCode, couponCode, whatsappMarketingOptIn = false }) {
   const finalEmail = normalizeEmail(email);
   const finalRole = normalizeRole(role);
 
@@ -211,6 +211,8 @@ export async function signupUser({ name, email, phone, password, role, otp, sign
     name,
     email: finalEmail,
     phone,
+    whatsappMarketingOptIn: whatsappMarketingOptIn === true,
+    whatsappMarketingOptInAt: whatsappMarketingOptIn === true ? new Date() : null,
     passwordHash,
     role: finalRole,
     isBuddy: finalRole === 'BUDDY',

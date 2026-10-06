@@ -5,7 +5,7 @@ import app from './app.js';
 import { env } from './config/environment.js';
 import { connectDatabase } from './config/database.js';
 import { ensureBootstrapAdminUsers } from './services/authService.js';
-import { purgeExpiredBookingLocations } from './services/bookingService.js';
+import { expireStalePaymentHolds, purgeExpiredBookingLocations } from './services/bookingService.js';
 import User from './models/User.js';
 import CallLog from './models/CallLog.js';
 import Message from './models/Message.js';
@@ -361,6 +361,11 @@ async function start() {
   const connected = await connectDatabase();
   if (connected) {
     await ensureBootstrapAdminUsers();
+    await expireStalePaymentHolds().catch((err) => console.error('Payment hold cleanup failed:', err));
+    const paymentHoldCleanup = setInterval(() => {
+      expireStalePaymentHolds().catch((err) => console.error('Payment hold cleanup failed:', err));
+    }, 60 * 1000);
+    paymentHoldCleanup.unref();
     const locationCleanup = setInterval(() => {
       purgeExpiredBookingLocations().catch((err) => console.error('Location cleanup failed:', err));
     }, 60 * 60 * 1000);

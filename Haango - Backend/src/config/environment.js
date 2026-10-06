@@ -8,6 +8,8 @@ const getNumber = (key, fallback) => {
 };
 
 const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+const officialEmailUser = process.env.HAANGO_OFFICIAL_USER || '';
+const officialEmailPass = (process.env.HAANGO_OFFICIAL_PASS || '').replace(/\s+/g, '');
 const corsOrigins = (process.env.CORS_ORIGINS || `${clientUrl},http://localhost:5173,http://127.0.0.1:5173`)
   .split(',')
   .map((origin) => origin.trim())
@@ -37,16 +39,24 @@ export const env = {
   corsOrigins,
   apiPublicUrl: (process.env.API_PUBLIC_URL || `http://localhost:${process.env.PORT || '5000'}`).replace(/\/$/, ''),
 
-  smtpHost: process.env.SMTP_HOST || '',
-  smtpPort: getNumber('SMTP_PORT', 587),
-  smtpUser: process.env.SMTP_USER || '',
-  smtpPass: (process.env.SMTP_PASS || '').replace(/\s+/g, ''),
-  smtpFrom: process.env.SMTP_FROM || 'no-reply@haango.local',
+  smtpHost: process.env.SMTP_HOST || (officialEmailUser ? 'smtp.gmail.com' : ''),
+  smtpPort: getNumber('SMTP_PORT', officialEmailUser ? 465 : 587),
+  smtpUser: process.env.SMTP_USER || officialEmailUser,
+  smtpPass: (process.env.SMTP_PASS || officialEmailPass).replace(/\s+/g, ''),
+  smtpFrom: process.env.SMTP_FROM || officialEmailUser || 'no-reply@haango.local',
   smtpFromName: process.env.SMTP_FROM_NAME || 'Haango',
-  emailEnabled: Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS),
+  officialEmailUser,
+  officialEmailPass,
+  emailEnabled: Boolean(
+    (process.env.SMTP_HOST || officialEmailUser)
+    && (process.env.SMTP_USER || officialEmailUser)
+    && (process.env.SMTP_PASS || officialEmailPass)
+  ),
   hostingerMailApiUrl: process.env.HOSTINGER_MAIL_API_URL || 'https://api.mail.hostinger.com',
   hostingerMailApiToken: process.env.HOSTINGER_MAIL_API_TOKEN || '',
   hostingerMailbox: process.env.HOSTINGER_MAILBOX || process.env.SMTP_USER || '',
+
+  whatsappDefaultCountryCode: (process.env.WHATSAPP_DEFAULT_COUNTRY_CODE || '91').replace(/\D/g, ''),
 
   platformFeePercentage: parseFloat(process.env.PLATFORM_FEE_PERCENTAGE || '3'),
   payuKey: process.env.PAYU_KEY || '',

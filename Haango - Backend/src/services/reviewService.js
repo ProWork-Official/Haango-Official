@@ -2,7 +2,6 @@ import Review from '../models/Review.js';
 import Booking from '../models/Booking.js';
 import BuddyProfile from '../models/BuddyProfile.js';
 import { notFound, badRequest, forbidden, conflict } from '../utils/errors.js';
-import { recordAdminAction } from './adminAuditService.js';
 
 export async function createReview(customerId, { bookingId, rating, comment, images = [] }) {
   const booking = await Booking.findById(bookingId);
@@ -54,13 +53,12 @@ export async function deleteReview(customerId, reviewId) {
   return { deleted: true, reviewId };
 }
 
-export async function deleteReviewAsAdmin(reviewId, actor, request) {
+export async function deleteReviewAsAdmin(reviewId) {
   const review = await Review.findById(reviewId);
   if (!review) throw notFound('Review not found');
   const buddyId = review.buddyId;
   await review.deleteOne();
   await updateBuddyRating(buddyId);
-  await recordAdminAction({ actor, request, action: 'REVIEW_DELETION', targetType: 'Review', targetId: review._id, metadata: { buddyId, rating: review.rating } });
   return { deleted: true, reviewId };
 }
 

@@ -1,5 +1,6 @@
 import { success } from '../utils/response.js';
 import { getProfileSummary, updateProfile, dismissProfilePrompt, restoreProfilePrompt, getLikedBuddies, toggleLikedBuddy } from '../services/profileService.js';
+import * as referralService from '../services/referralService.js';
 
 export async function getMyProfile(req, res, next) {
   try {
@@ -49,6 +50,22 @@ export async function getLiked(req, res, next) {
 export async function toggleLike(req, res, next) {
   try {
     res.json(success(await toggleLikedBuddy(req.user._id, req.params.buddyId)));
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getMyReferrals(req, res, next) {
+  try {
+    res.json(success(await referralService.getMyReferralOverview(req.user._id)));
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function claimReferralReward(req, res, next) {
+  try {
+    res.json(success(await referralService.claimReferralReward(req.user._id, req.params.referredUserId)));
   } catch (error) {
     next(error);
   }

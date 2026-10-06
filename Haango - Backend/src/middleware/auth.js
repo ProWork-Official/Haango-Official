@@ -40,6 +40,38 @@ export async function requireAuth(req, _res, next) {
   }
 }
 
+export async function optionalAuth(req, _res, next) {
+  const authHeader = req.headers.authorization;
+  const cookieToken = req.cookies?.[env.accessCookieName];
+  const headerToken = req.headers['x-access-token'];
+  const queryToken = req.query?.access_token;
+  const token = authHeader?.startsWith('Bearer ')
+    ? authHeader.split(' ')[1]
+    : (headerToken || cookieToken || queryToken);
+
+  if (!token) return next();
+
+  let decoded;
+  try {
+    decoded = jwt.verify(token, env.jwtSecret);
+  } catch {
+    return next();
+  }
+
+  try {
+    const user = await User.findById(decoded.userId);
+    if (user?.isActive) {
+      user.lastSeenAt = new Date();
+      await user.save();
+      req.user = user;
+    }
+  } catch {
+    // Visit tracking remains public if optional account lookup is unavailable.
+  }
+
+  return next();
+}
+
 export function requireRole(...roles) {
   return (req, _res, next) => {
     if (!req.user) return next(unauthorized('Authentication required'));

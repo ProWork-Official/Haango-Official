@@ -33,7 +33,7 @@ export async function payuReturn(req, res) {
   if (result.booking?._id) params.set('bookingId', String(result.booking._id));
   if (result.booking?.duration) params.set('duration', String(result.booking.duration));
   if (result.booking?.payment?.amount !== undefined) {
-    params.set('paymentAmount', String(result.booking.payment.amount));
+    params.set('paymentAmount', String(result.booking.payment.amount + (result.booking.payment.walletAmount || 0)));
   }
 
   const payment = !result.verified

@@ -20,3 +20,18 @@ export function calculateBookingPrice(buddyHourlyRate, duration) {
     haangoCommission,
   };
 }
+
+  export function calculateCheckoutAmounts(totalAmount, couponDiscount, walletBalance, useWallet) {
+    const total = Math.max(0, Number(totalAmount) || 0);
+    const discount = Math.min(total, Math.max(0, Number(couponDiscount) || 0));
+    const amountAfterCoupon = total - discount;
+    const walletAmount = useWallet
+      ? Math.min(Math.floor(Math.max(0, Number(walletBalance) || 0)), Math.floor(amountAfterCoupon))
+      : 0;
+
+    return {
+      amountAfterCoupon,
+      walletAmount,
+      paymentAmount: amountAfterCoupon - walletAmount,
+    };
+  }

@@ -2,9 +2,11 @@ import Booking from '../models/Booking.js';
 import Wallet from '../models/Wallet.js';
 import Withdrawal from '../models/Withdrawal.js';
 import WalletBonus from '../models/WalletBonus.js';
+import BuddyProfile from '../models/BuddyProfile.js';
+import User from '../models/User.js';
+import BuddyWalletAdjustment from '../models/BuddyWalletAdjustment.js';
 import { getBonusStatus, ensureEarlyStarterBonus } from './bonusService.js';
 import { badRequest, forbidden, notFound } from '../utils/errors.js';
-import { recordAdminAction } from './adminAuditService.js';
 
 const MIN_WITHDRAWAL = 300;
 const ACTIVE_WITHDRAWAL_STATUSES = ['PENDING', 'PROCESSING', 'PAID'];
@@ -26,6 +28,16 @@ export function computeBuddyPayoutBreakdown({ buddyRate, duration, amount = null
     buddyPayoutAmount,
     platformShareAmount,
     totalBookingValue: Math.round(baseAmount),
+  };
+}
+
+export function calculateBuddyWalletTotals({ bookingEarnings = 0, bonuses = 0, adminCredits = 0, adminDebits = 0, activeWithdrawals = 0 }) {
+  const totalEarned = Number(bookingEarnings) + Number(bonuses) + Number(adminCredits) - Number(adminDebits);
+  const totalWithdrawn = Number(activeWithdrawals);
+  return {
+    totalEarned,
+    totalWithdrawn,
+    availableBalance: Math.max(0, totalEarned - totalWithdrawn),
   };
 }
 
@@ -135,7 +147,7 @@ async function getEarnings(userId, period = 'month') {
   const periodStart = getPeriodStart(period);
   await ensureEarlyStarterBonus(userId);
 
-  const [earningsResult, allTimeEarningsResult, withdrawalsResult, bonusResult, completionResult] = await Promise.all([
+  const [earningsResult, allTimeEarningsResult, withdrawalsResult, bonusResult, allTimeBonusResult, adjustmentResult, completionResult] = await Promise.all([
     Booking.aggregate([
       { $match: { buddyId: userId, bookingStatus: 'COMPLETED', updatedAt: { $gte: periodStart } } },
       {
@@ -154,6 +166,19 @@ async function getEarnings(userId, period = 'month') {
       { $group: { _id: null, totalWithdrawn: { $sum: '$amount' } } },
     ]),
     WalletBonus.aggregate([{ $match: { userId, createdAt: { $gte: periodStart } } }, { $group: { _id: null, totalBonus: { $sum: '$amount' } } }]),
+    WalletBonus.aggregate([{ $match: { userId } }, { $group: { _id: null, totalBonus: { $sum: '$amount' } } }]),
+    BuddyWalletAdjustment.aggregate([
+      { $match: { userId } },
+      {
+        $group: {
+          _id: null,
+          credits: { $sum: { $cond: [{ $eq: ['$type', 'CREDIT'] }, '$amount', 0] } },
+          debits: { $sum: { $cond: [{ $eq: ['$type', 'DEBIT'] }, '$amount', 0] } },
+          periodCredits: { $sum: { $cond: [{ $and: [{ $eq: ['$type', 'CREDIT'] }, { $gte: ['$createdAt', periodStart] }] }, '$amount', 0] } },
+          periodDebits: { $sum: { $cond: [{ $and: [{ $eq: ['$type', 'DEBIT'] }, { $gte: ['$createdAt', periodStart] }] }, '$amount', 0] } },
+        },
+      },
+    ]),
     Booking.aggregate([
       { $match: { buddyId: userId, bookingStatus: { $in: ['COMPLETED', 'CANCELLED', 'REJECTED'] } } },
       { $group: { _id: null, completed: { $sum: { $cond: [{ $eq: ['$bookingStatus', 'COMPLETED'] }, 1, 0] } }, total: { $sum: 1 } } },
@@ -162,16 +187,24 @@ async function getEarnings(userId, period = 'month') {
 
   const earnedThisPeriodFromBookings = earningsResult[0]?.totalEarned || 0;
   const earnedFromBookings = allTimeEarningsResult[0]?.totalEarned || 0;
-  const totalBonus = bonusResult[0]?.totalBonus || 0;
-  const totalEarned = earnedFromBookings + totalBonus;
+  const periodBonus = bonusResult[0]?.totalBonus || 0;
+  const totalBonus = allTimeBonusResult[0]?.totalBonus || 0;
+  const adjustments = adjustmentResult[0] || {};
   const totalWithdrawn = withdrawalsResult[0]?.totalWithdrawn || 0;
+  const walletTotals = calculateBuddyWalletTotals({
+    bookingEarnings: earnedFromBookings,
+    bonuses: totalBonus,
+    adminCredits: adjustments.credits || 0,
+    adminDebits: adjustments.debits || 0,
+    activeWithdrawals: totalWithdrawn,
+  });
   const completedMeetings = completionResult[0]?.completed || 0;
   const decidedBookings = completionResult[0]?.total || 0;
   return {
-    totalEarned,
-    earnedThisPeriod: earnedThisPeriodFromBookings + totalBonus,
-    totalWithdrawn,
-    availableBalance: Math.max(0, totalEarned - totalWithdrawn),
+    totalEarned: walletTotals.totalEarned,
+    earnedThisPeriod: earnedThisPeriodFromBookings + periodBonus + Number(adjustments.periodCredits || 0) - Number(adjustments.periodDebits || 0),
+    totalWithdrawn: walletTotals.totalWithdrawn,
+    availableBalance: walletTotals.availableBalance,
     completionRate: completedMeetings > 0 && decidedBookings > 0
       ? Math.round((completedMeetings / decidedBookings) * 100)
       : 0,
@@ -195,6 +228,99 @@ export async function getWalletSummary(userId, period = 'month') {
     minimumWithdrawal: MIN_WITHDRAWAL,
     bonus,
   };
+}
+
+function serializeAdminPayoutWallet(wallet) {
+  if (!wallet) return null;
+  return {
+    payoutMethod: wallet.payoutMethod,
+    accountHolderName: wallet.accountHolderName,
+    bankName: wallet.bankName,
+    accountNumber: wallet.accountNumber,
+    ifscCode: wallet.ifscCode,
+    upiId: wallet.upiId,
+    isVerified: wallet.isVerified,
+    destinationMasked: wallet.payoutMethod === 'UPI'
+      ? maskUpiId(wallet.upiId)
+      : maskAccountNumber(wallet.accountNumber),
+  };
+}
+
+export async function getAdminBuddyWallet(buddyProfileId) {
+  const buddyProfile = await BuddyProfile.findById(buddyProfileId).select('userId');
+  if (!buddyProfile) throw notFound('Buddy profile not found');
+  const userId = buddyProfile.userId?._id || buddyProfile.userId;
+  const user = await User.findById(userId).select('name email role');
+  if (!user || user.role !== 'BUDDY') throw notFound('Buddy account not found');
+
+  const [wallet, earnings, withdrawals, adjustments] = await Promise.all([
+    getWalletDocument(userId),
+    getEarnings(userId),
+    Withdrawal.find({ userId }).sort({ createdAt: -1 }).limit(100).lean(),
+    BuddyWalletAdjustment.find({ userId }).sort({ createdAt: -1 }).limit(50).lean(),
+  ]);
+
+  return {
+    user: { id: String(user._id), name: user.name, email: user.email },
+    wallet: serializeAdminPayoutWallet(wallet),
+    availableBalance: earnings.availableBalance,
+    totalEarned: earnings.totalEarned,
+    totalWithdrawn: earnings.totalWithdrawn,
+    withdrawals,
+    adjustments,
+  };
+}
+
+export async function adjustBuddyWallet(buddyProfileId, amount, referenceId, adminId) {
+  const buddyProfile = await BuddyProfile.findById(buddyProfileId).select('userId');
+  if (!buddyProfile) throw notFound('Buddy profile not found');
+  const userId = buddyProfile.userId?._id || buddyProfile.userId;
+  const user = await User.findById(userId).select('_id role');
+  if (!user || user.role !== 'BUDDY') throw notFound('Buddy account not found');
+
+  const adjustment = Number(amount);
+  if (!Number.isSafeInteger(adjustment) || adjustment === 0) {
+    throw badRequest('Enter a non-zero whole-rupee wallet adjustment', 'INVALID_WALLET_ADJUSTMENT');
+  }
+  if (!/^[\w-]{1,100}$/.test(String(referenceId || ''))) {
+    throw badRequest('A valid wallet adjustment reference is required', 'INVALID_WALLET_ADJUSTMENT_REFERENCE');
+  }
+
+  const existing = await BuddyWalletAdjustment.findOne({ referenceId });
+  if (existing) {
+    if (String(existing.userId) !== String(userId) || existing.amount !== Math.abs(adjustment)
+      || existing.type !== (adjustment > 0 ? 'CREDIT' : 'DEBIT')) {
+      throw badRequest('This wallet adjustment reference was already used', 'WALLET_ADJUSTMENT_REFERENCE_REUSED');
+    }
+    return getAdminBuddyWallet(buddyProfileId);
+  }
+
+  if (adjustment < 0) {
+    const earnings = await getEarnings(userId);
+    if (Math.abs(adjustment) > earnings.availableBalance) {
+      throw badRequest('Debit exceeds the buddy’s available wallet balance', 'INSUFFICIENT_BUDDY_WALLET_BALANCE');
+    }
+  }
+
+  try {
+    await BuddyWalletAdjustment.create({
+      userId,
+      adminId,
+      type: adjustment > 0 ? 'CREDIT' : 'DEBIT',
+      amount: Math.abs(adjustment),
+      description: 'Admin wallet adjustment',
+      referenceId,
+    });
+  } catch (error) {
+    if (error?.code !== 11000) throw error;
+    const duplicate = await BuddyWalletAdjustment.findOne({ referenceId });
+    if (!duplicate || String(duplicate.userId) !== String(userId) || duplicate.amount !== Math.abs(adjustment)
+      || duplicate.type !== (adjustment > 0 ? 'CREDIT' : 'DEBIT')) {
+      throw badRequest('This wallet adjustment reference was already used', 'WALLET_ADJUSTMENT_REFERENCE_REUSED');
+    }
+  }
+
+  return getAdminBuddyWallet(buddyProfileId);
 }
 
 export async function savePayoutDetails(userId, data) {
@@ -268,25 +394,37 @@ export async function requestWithdrawal(userId, amount) {
 export async function getAllWithdrawals(filters = {}) {
   const query = {};
   if (filters.status) query.status = filters.status;
+  if (filters.userId) query.userId = filters.userId;
   return Withdrawal.find(query)
     .populate('userId', 'name email phone')
     .sort({ createdAt: -1 })
     .limit(Number(filters.limit) || 50);
 }
 
-export async function updateWithdrawal(withdrawalId, status, adminNote, transactionReference, actor, request) {
+export async function updateWithdrawal(withdrawalId, status, adminNote, transactionReference) {
   if (!['PROCESSING', 'PAID', 'REJECTED'].includes(status)) {
     throw badRequest('Invalid withdrawal status', 'INVALID_WITHDRAWAL_STATUS');
   }
   const withdrawal = await Withdrawal.findById(withdrawalId);
   if (!withdrawal) throw notFound('Withdrawal not found');
-  if (withdrawal.status === 'PAID') throw badRequest('Paid withdrawal cannot be changed', 'WITHDRAWAL_ALREADY_PAID');
+  if (withdrawal.status === status) return withdrawal;
+  const allowedTransitions = {
+    PENDING: ['PROCESSING', 'PAID', 'REJECTED'],
+    PROCESSING: ['PAID', 'REJECTED'],
+    PAID: [],
+    REJECTED: [],
+  };
+  if (!allowedTransitions[withdrawal.status]?.includes(status)) {
+    throw badRequest('This withdrawal status cannot be changed', 'WITHDRAWAL_INVALID_TRANSITION');
+  }
 
   withdrawal.status = status;
   if (adminNote !== undefined) withdrawal.adminNote = String(adminNote).trim();
   if (transactionReference !== undefined) withdrawal.transactionReference = String(transactionReference).trim();
+  if (status === 'REJECTED') {
+    withdrawal.failureReason = String(adminNote || '').trim() || 'Withdrawal could not be completed. Please try again.';
+  }
   await withdrawal.save();
-  await recordAdminAction({ actor, request, action: 'WITHDRAWAL_DECISION', targetType: 'Withdrawal', targetId: withdrawal._id, metadata: { status } });
   return withdrawal;
 }
 

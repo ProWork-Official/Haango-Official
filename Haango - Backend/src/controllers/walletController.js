@@ -45,8 +45,6 @@ export async function adminUpdateWithdrawal(req, res, next) {
       status,
       adminNote,
       transactionReference,
-      req.user,
-      req,
     )));
   } catch (err) {
     next(err);
