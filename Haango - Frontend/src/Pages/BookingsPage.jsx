@@ -270,6 +270,9 @@ export default function BookingsPage({ onBack, onMessage }) {
     const locationLocked = !locationUnlocked(booking) || locationSharingEnded(booking);
     const locationWindowOpen = locationUnlocked(booking) && !locationSharingEnded(booking);
     const isConfirmed = booking.bookingStatus === 'CONFIRMED' || booking.bookingStatus === 'ONGOING';
+    const totalAmount = Number(booking.totalAmount || 0);
+    const paidAmount = Number(booking.payment?.amount ?? totalAmount);
+    const hasDiscountedPayment = booking.payment?.status === 'PAID' && paidAmount < totalAmount;
 
     return (
       <div key={booking._id} className="rounded-[28px] border border-[#e6ddd4] bg-[#f7f5f2] p-3 shadow-[0_4px_18px_rgba(17,24,39,0.04)] sm:p-5">
@@ -308,7 +311,10 @@ export default function BookingsPage({ onBack, onMessage }) {
           <div className="flex items-center gap-2"><Clock3 size={16} className="text-ink-500" /> <span>{booking.startTime} · {booking.duration} hrs</span></div>
           <div className="flex items-center justify-between gap-2 sm:justify-end">
             <div className="flex items-center gap-2"><MapPin size={16} className="text-ink-500" /> <span>{booking.meetingLocation}</span></div>
-            <span className="text-base font-bold text-ink-900">₹{Number(booking.totalAmount || 0).toLocaleString('en-IN')}</span>
+            <span className="flex flex-col items-end text-right text-base font-bold text-ink-900">
+              {hasDiscountedPayment && <span className="text-sm font-medium text-ink-400 line-through">₹{totalAmount.toLocaleString('en-IN')}</span>}
+              <span>{hasDiscountedPayment ? 'Paid ' : ''}₹{(hasDiscountedPayment ? paidAmount : totalAmount).toLocaleString('en-IN')}</span>
+            </span>
           </div>
         </div>
 

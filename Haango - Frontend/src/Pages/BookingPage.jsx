@@ -110,7 +110,7 @@ function getCityLocationPool(cityName) {
 
 function getPaymentRetryDraft(buddyId) {
   const params = new URLSearchParams(window.location.search);
-  if (!['failed', 'verification-failed'].includes(params.get('payment'))) return null;
+  if (!['success', 'failed', 'verification-failed'].includes(params.get('payment'))) return null;
 
   try {
     const draft = JSON.parse(sessionStorage.getItem(`haango_payment_draft_${buddyId}`) || 'null');
@@ -126,7 +126,7 @@ export default function BookingPage({
   onBack,
   onRequireLogin,
 }) {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const [buddy, setBuddy] = useState(null);
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -154,22 +154,40 @@ export default function BookingPage({
   const [customLocation, setCustomLocation] = useState('');
   const [visibleLocations, setVisibleLocations] = useState([]);
   const [showCustomLocation, setShowCustomLocation] = useState(false);
-  const [confirmed] = useState(() => (
+  const [confirmed, setConfirmed] = useState(() => (
     new URLSearchParams(window.location.search).get('payment') === 'success'
   ));
   const [submitting, setSubmitting] = useState(false);
   const [couponCode, setCouponCode] = useState(paymentRetryDraft?.couponCode || '');
   const [couponDiscount, setCouponDiscount] = useState(Number(paymentRetryDraft?.couponDiscount || 0));
+  const [walletData, setWalletData] = useState(null);
+  const [useWalletMoney, setUseWalletMoney] = useState(Boolean(paymentRetryDraft?.useWallet));
   const [couponMessage, setCouponMessage] = useState('');
   const [applyingCoupon, setApplyingCoupon] = useState(false);
   const [paymentReturnStatus, setPaymentReturnStatus] = useState(() => (
     new URLSearchParams(window.location.search).get('payment') || ''
   ));
-  const [paymentReturnAmount] = useState(() => {
+  const [paymentReturnAmount, setPaymentReturnAmount] = useState(() => {
     const value = new URLSearchParams(window.location.search).get('paymentAmount');
     const amount = Number(value);
     return value !== null && Number.isFinite(amount) && amount >= 0 ? amount : null;
   });
+  const walletUserId = String(user?.id || user?._id || '');
+  const walletBalance = walletData?.userId === walletUserId ? walletData.balance : 0;
+  const walletLoading = Boolean(walletUserId && walletData?.userId !== walletUserId);
+
+  useEffect(() => {
+    if (!walletUserId) return undefined;
+    let active = true;
+    apiRequest('/customer-wallet')
+      .then((wallet) => {
+        if (active) setWalletData({ userId: walletUserId, balance: Math.max(0, Number(wallet?.balance) || 0) });
+      })
+      .catch(() => {
+        if (active) setWalletData({ userId: walletUserId, balance: 0 });
+      });
+    return () => { active = false; };
+  }, [walletUserId]);
 
   useEffect(() => {
     if (!buddy) return;
@@ -279,7 +297,11 @@ export default function BookingPage({
   const buddyFee = buddy.pricePerHour * duration;
   const hangoFee = Math.round((buddyFee * 3) / 100);
   const total = buddyFee + hangoFee;
-  const payableTotal = Math.max(0, total - couponDiscount);
+  const payableAfterCoupon = Math.max(0, total - couponDiscount);
+  const walletAmountToUse = useWalletMoney
+    ? Math.min(Math.floor(walletBalance), Math.floor(payableAfterCoupon))
+    : 0;
+  const payableTotal = Math.max(0, payableAfterCoupon - walletAmountToUse);
   const showPricingBreakdown = step > 0;
 
   if (isSelfBooking) {
@@ -869,11 +891,18 @@ export default function BookingPage({
                     </span>
 
                     <span className="text-right">
-                      {couponDiscount > 0 && <span className="block text-sm font-medium text-ink-400 line-through">₹{total.toLocaleString('en-IN')}</span>}
+                      {(couponDiscount > 0 || walletAmountToUse > 0) && <span className="block text-sm font-medium text-ink-400 line-through">₹{total.toLocaleString('en-IN')}</span>}
                       <span className="font-display text-2xl font-extrabold text-ink-900">₹{payableTotal.toLocaleString('en-IN')}</span>
                     </span>
                   </div>
                   {couponDiscount > 0 && <div className="mt-3 flex justify-between text-sm text-success-600"><span>Coupon discount</span><span>-₹{couponDiscount.toLocaleString('en-IN')}</span></div>}
+                  {user && <label className="mt-5 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-[#e7edf7] bg-[#f8faff] p-3.5">
+                    <span className="flex min-w-0 items-start gap-3">
+                      <input type="checkbox" className="mt-0.5 h-4 w-4 accent-blue-600" checked={useWalletMoney} onChange={(event) => setUseWalletMoney(event.target.checked)} disabled={walletLoading || walletBalance <= 0 || payableAfterCoupon <= 0} />
+                      <span><span className="block text-sm font-semibold text-ink-900">Use wallet money</span><span className="mt-0.5 block text-xs text-ink-500">{walletLoading ? 'Checking wallet balance…' : `Available balance: ₹${walletBalance.toLocaleString('en-IN')}`}</span></span>
+                    </span>
+                    {walletAmountToUse > 0 && <strong className="shrink-0 text-sm font-semibold text-success-600">-₹{walletAmountToUse.toLocaleString('en-IN')}</strong>}
+                  </label>}
                   <p className="mt-4 text-xs leading-relaxed text-ink-500">
                     Your payment includes the buddy fee and Haango fee. The buddy receives 80% of the buddy fee after the session end code is verified.
                   </p>
@@ -881,7 +910,7 @@ export default function BookingPage({
 
                 {paymentReturnStatus === 'failed' && (
                   <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">
-                    Payment wasn't completed. You can try again; no booking request was sent.
+                    Payment wasn't completed. Wallet funds used for this attempt have been returned. You can try again; no booking request was sent.
                   </p>
                 )}
                 {paymentReturnStatus === 'refund-pending' && (
@@ -914,6 +943,7 @@ export default function BookingPage({
                         meetingLocation: location,
                         couponCode: couponCode.trim(),
                         couponDiscount,
+                        useWallet: useWalletMoney,
                       }));
                       await requestLocationPermission();
                       const checkout = await apiRequest('/bookings', {
@@ -926,8 +956,17 @@ export default function BookingPage({
                           duration,
                           meetingLocation: location,
                           couponCode: couponCode.trim(),
+                          useWallet: useWalletMoney,
                         }),
                       });
+
+                      if (checkout?.walletOnly) {
+                        setPaymentReturnAmount(payableAfterCoupon);
+                        setPaymentReturnStatus('success');
+                        setConfirmed(true);
+                        setSubmitting(false);
+                        return;
+                      }
 
                       const form = document.createElement('form');
                       form.method = 'POST';
@@ -950,7 +989,7 @@ export default function BookingPage({
                   disabled={submitting}
                   className="btn-primary w-full mt-6 text-base py-4 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {submitting ? 'Opening PayU...' : `Pay ₹${payableTotal.toLocaleString('en-IN')} with PayU`}
+                  {submitting ? 'Preparing checkout...' : payableTotal > 0 ? `Pay ₹${payableTotal.toLocaleString('en-IN')} with PayU` : 'Confirm booking'}
                 </button>
 
                 <button
@@ -1069,6 +1108,7 @@ export default function BookingPage({
                   </div>
 
                   {couponDiscount > 0 && <div className="flex justify-between text-sm text-success-600"><span>Coupon discount</span><span>-₹{couponDiscount.toLocaleString('en-IN')}</span></div>}
+                  {walletAmountToUse > 0 && <div className="flex justify-between text-sm text-success-600"><span>Wallet money</span><span>-₹{walletAmountToUse.toLocaleString('en-IN')}</span></div>}
 
                   <div className="flex justify-between items-center pt-2">
                     <span className="font-display font-bold text-ink-900">

@@ -49,6 +49,14 @@ export default function WalletPanel({ onboardingOnly = false, onSaved }) {
 
   useEffect(() => {
     let active = true;
+    const refreshWalletSilently = async () => {
+      try {
+        const nextSummary = await apiRequest('/wallet');
+        if (active) setSummary(nextSummary);
+      } catch {
+        // Keep the last known balance when a background refresh fails.
+      }
+    };
     const fetchWallet = async () => {
       try {
         const nextSummary = await apiRequest('/wallet');
@@ -71,8 +79,19 @@ export default function WalletPanel({ onboardingOnly = false, onSaved }) {
       }
     };
     fetchWallet();
-    return () => { active = false; };
-  }, []);
+    const refreshInterval = onboardingOnly ? null : window.setInterval(() => {
+      if (document.visibilityState === 'visible') refreshWalletSilently();
+    }, 20000);
+    const handleVisibilityChange = () => {
+      if (!onboardingOnly && document.visibilityState === 'visible') refreshWalletSilently();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      active = false;
+      if (refreshInterval) window.clearInterval(refreshInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [onboardingOnly]);
 
   const updateField = (field, value) => {
     setMessage('');
@@ -189,7 +208,7 @@ export default function WalletPanel({ onboardingOnly = false, onSaved }) {
             {summary?.wallet && Number(summary?.availableBalance || 0) < Number(summary?.minimumWithdrawal || 300) && <p className="mt-3 text-xs text-amber-600">No withdrawable balance yet. You need at least ₹300 available to withdraw.</p>}
           </form>
 
-          <div className="card p-6"><h3 className="font-display text-lg font-bold text-ink-900">Withdrawal history</h3><div className="mt-4 space-y-3">{summary?.withdrawals?.length ? summary.withdrawals.map((withdrawal) => <div key={withdrawal._id} className="flex items-center justify-between border-b border-ink-100 pb-3 text-sm last:border-0"><span><span className="font-semibold text-ink-900">{currency(withdrawal.amount)}</span><span className="ml-2 text-xs text-ink-400">{withdrawal.destinationMasked}</span></span><span className="text-xs font-semibold text-ink-500">{withdrawal.status}</span></div>) : <p className="text-sm text-ink-500">No withdrawal requests yet.</p>}</div></div>
+          <div className="card p-6"><h3 className="font-display text-lg font-bold text-ink-900">Withdrawal history</h3><div className="mt-4 space-y-3">{summary?.withdrawals?.length ? summary.withdrawals.map((withdrawal) => <div key={withdrawal._id} className="border-b border-ink-100 pb-3 text-sm last:border-0"><div className="flex items-center justify-between gap-3"><span><span className="font-semibold text-ink-900">{currency(withdrawal.amount)}</span><span className="ml-2 text-xs text-ink-400">{withdrawal.destinationMasked}</span></span><span className={`text-xs font-semibold ${withdrawal.status === 'REJECTED' ? 'text-error-600' : withdrawal.status === 'PAID' ? 'text-success-700' : 'text-ink-500'}`}>{withdrawal.status === 'PAID' ? 'COMPLETED' : withdrawal.status}</span></div>{withdrawal.status === 'REJECTED' && <p className="mt-2 text-xs font-medium text-error-600">Withdrawal could not be completed. Please try again. Your amount has been returned to your available balance.</p>}</div>) : <p className="text-sm text-ink-500">No withdrawal requests yet.</p>}</div></div>
         </div>}
       </div>
       {(message || error) && <p className={`rounded-2xl p-4 text-sm ${error ? 'bg-error-50 text-error-600' : 'bg-success-50 text-success-700'}`}>{error || message}</p>}

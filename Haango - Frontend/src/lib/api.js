@@ -46,6 +46,7 @@ async function refreshAccessToken() {
 }
 
 export async function apiRequest(path, options = {}, retryOnUnauthorized = true) {
+  const { includeMetadata = false, ...requestOptions } = options;
   const accessToken = localStorage.getItem('haango_access_token');
   const response = await fetch(`${API_BASE_URL}${path}`, {
     credentials: 'include',
@@ -56,9 +57,9 @@ export async function apiRequest(path, options = {}, retryOnUnauthorized = true)
       ...(localStorage.getItem('haango_refresh_token')
         ? { 'x-refresh-token': localStorage.getItem('haango_refresh_token') }
         : {}),
-      ...(options.headers || {}),
+      ...(requestOptions.headers || {}),
     },
-    ...options,
+    ...requestOptions,
   });
 
   const payload = await response.json().catch(() => null);
@@ -75,6 +76,10 @@ export async function apiRequest(path, options = {}, retryOnUnauthorized = true)
 
   if (!response.ok) {
     throw new ApiError(payload?.message || payload?.error || 'Request failed', response.status, payload);
+  }
+
+  if (includeMetadata && payload?.pagination) {
+    return { data: payload.data, pagination: payload.pagination };
   }
 
   return payload?.data ?? payload;

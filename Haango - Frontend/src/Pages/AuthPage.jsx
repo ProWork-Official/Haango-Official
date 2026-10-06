@@ -29,7 +29,8 @@ export default function AuthPage({
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [signupCode, setSignupCode] = useState('');
+  const [whatsappMarketingOptIn, setWhatsappMarketingOptIn] = useState(false);
+  const [signupCode, setSignupCode] = useState(() => new URLSearchParams(window.location.search).get('signupCode') || '');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [otp, setOtp] = useState('');
@@ -188,6 +189,7 @@ export default function AuthPage({
           userType,
           otp: otp.trim(),
           signupCode: signupCode.trim(),
+          whatsappMarketingOptIn,
         });
 
         if (error) {
@@ -548,6 +550,13 @@ export default function AuthPage({
                     className="w-full rounded-2xl border-2 border-[#ece3d8] bg-[#fffaf5] px-4 py-3.5 text-sm text-[#102038] placeholder-[#a89a88] outline-none focus:border-[#ff7418] focus:bg-white"
                   />
                 </div>
+              )}
+
+              {mode === 'signup' && (
+                <label className="flex items-start gap-3 rounded-xl border border-[#ece3d8] bg-white p-3 text-xs leading-relaxed text-[#665b50]">
+                  <input type="checkbox" checked={whatsappMarketingOptIn} onChange={(event) => setWhatsappMarketingOptIn(event.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-[#ff7418]" />
+                  <span>I agree to receive occasional offers and promotions from Haango on WhatsApp. I can opt out anytime by replying STOP.</span>
+                </label>
               )}
 
               {/* Password */}

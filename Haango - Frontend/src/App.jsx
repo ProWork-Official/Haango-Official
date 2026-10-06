@@ -10,6 +10,7 @@ import ProfilePage from './Pages/ProfilePage';
 import BookingPage from './Pages/BookingPage';
 import MessagesPage from './Pages/MessagesPage';
 import DashboardPage from './Pages/DashboardPage';
+import ReferralsPage from './Pages/ReferralsPage';
 import AdminPage from './Pages/AdminPage';
 import FAQSection from './Components/FAQ';
 import AuthPage from './Pages/AuthPage';
@@ -25,7 +26,13 @@ import { AuthProvider, useAuth } from './lib/auth';
 import { apiRequest } from './lib/api';
 import { registerPushSubscription, requestBrowserNotificationPermission, triggerBrowserNotification } from './lib/browserNotifications';
 import AdminAllUsersPage from './Pages/AdminAllUsersPage';
+import AdminPlatformActivityPage from './Pages/AdminPlatformActivityPage';
+import AdminAllBuddiesPage from './Pages/AdminAllBuddiesPage';
+import AdminReportsReviewsPage from './Pages/AdminReportsReviewsPage';
+import AdminEmailPage from './Pages/AdminEmailPage';
+import AdminWhatsAppPage from './Pages/AdminWhatsAppPage';
 import AdminCouponsPage from './Pages/AdminCouponsPage';
+import AdminSupportRequestsPage from './Pages/AdminSupportRequestsPage';
 import ContactPage from './Pages/ContactPage';
 import SupportPage from './Pages/SupportPage';
 import CommunityGuidelinesPage from './Pages/CommunityGuidelinesPage';
@@ -195,19 +202,34 @@ function AppContent() {
       localStorage.setItem(storageKey, visitorId);
     }
     const startedAt = Date.now();
+    const visitId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const track = () => {
       const timeSpent = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
       apiRequest('/analytics/track', {
         method: 'POST',
-        body: JSON.stringify({ visitorId, page: location.pathname, timeSpent, referrer: document.referrer }),
+        body: JSON.stringify({ visitorId, visitId, page: location.pathname, landingUrl: `${location.pathname}${location.search}`, timeSpent, referrer: document.referrer }),
+        keepalive: true,
       }).catch(() => {});
     };
+    apiRequest('/analytics/track', {
+      method: 'POST',
+      body: JSON.stringify({ visitorId, visitId, page: location.pathname, landingUrl: `${location.pathname}${location.search}`, timeSpent: 0, referrer: document.referrer }),
+    }).catch(() => {});
+    const heartbeat = window.setInterval(() => {
+      if (document.visibilityState === 'visible') track();
+    }, 60 * 1000);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') track();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('pagehide', track);
     return () => {
+      window.clearInterval(heartbeat);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('pagehide', track);
       track();
     };
-  }, [location.pathname]);
+  }, [location.pathname, location.search]);
 
   const currentPage = getPageKeyFromPath(location.pathname);
 
@@ -289,6 +311,7 @@ function AppContent() {
 
   const showFooter = !['/messages'].includes(location.pathname) || !activeConversation;
   const showBottomNav = !['/booking', '/messages', '/login', '/signup'].includes(location.pathname) || (location.pathname === '/messages' && !activeConversation);
+  const isAdminWorkspace = location.pathname.startsWith('/admin');
 
   if (loading) {
     return (
@@ -300,13 +323,13 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-ink-50">
-      <Navbar
+      {!isAdminWorkspace && <Navbar
         current={currentPage}
         onNavigate={routeNavigate}
         isLoggedIn={!!user}
         userName={profile?.full_name}
         onSignOut={handleSignOut}
-      />
+      />}
 
       <main>
         <Routes>
@@ -384,6 +407,7 @@ function AppContent() {
               <Navigate to="/login" replace />
             )
           } />
+          <Route path="/referrals" element={user ? <ReferralsPage onNavigate={routeNavigate} /> : <Navigate to="/login" replace />} />
 
           <Route path="/bookings" element={
             user ? <BookingsPage onBack={() => routeNavigate('/dashboard')} onMessage={startConversation} /> : <Navigate to="/login" replace />
@@ -418,6 +442,36 @@ function AppContent() {
               ? <AdminAllUsersPage onNavigate={routeNavigate} />
               : <Navigate to="/" replace />
           } />
+          <Route path="/admin/platform-activity" element={
+            ['ADMIN', 'SUPER_ADMIN', 'MASTER_ADMIN'].includes(profile?.role)
+              ? <AdminPlatformActivityPage onNavigate={routeNavigate} />
+              : <Navigate to="/" replace />
+          } />
+          <Route path="/admin/buddies" element={
+            ['ADMIN', 'SUPER_ADMIN', 'MASTER_ADMIN'].includes(profile?.role)
+              ? <AdminAllBuddiesPage onNavigate={routeNavigate} />
+              : <Navigate to="/" replace />
+          } />
+          <Route path="/admin/reports" element={
+            ['ADMIN', 'SUPER_ADMIN', 'MASTER_ADMIN'].includes(profile?.role)
+              ? <AdminReportsReviewsPage onNavigate={routeNavigate} pageType="reports" />
+              : <Navigate to="/" replace />
+          } />
+          <Route path="/admin/reviews" element={
+            ['ADMIN', 'SUPER_ADMIN', 'MASTER_ADMIN'].includes(profile?.role)
+              ? <AdminReportsReviewsPage onNavigate={routeNavigate} pageType="reviews" />
+              : <Navigate to="/" replace />
+          } />
+          <Route path="/admin/emails" element={
+            ['ADMIN', 'SUPER_ADMIN', 'MASTER_ADMIN'].includes(profile?.role)
+              ? <AdminEmailPage onNavigate={routeNavigate} />
+              : <Navigate to="/" replace />
+          } />
+          <Route path="/admin/whatsapp" element={
+            ['ADMIN', 'SUPER_ADMIN', 'MASTER_ADMIN'].includes(profile?.role)
+              ? <AdminWhatsAppPage onNavigate={routeNavigate} />
+              : <Navigate to="/" replace />
+          } />
           <Route path="/admin/coupons" element={
             ['ADMIN', 'SUPER_ADMIN', 'MASTER_ADMIN'].includes(profile?.role)
               ? <AdminCouponsPage onNavigate={routeNavigate} />
@@ -425,7 +479,7 @@ function AppContent() {
           } />
           <Route path="/admin/support-requests" element={
             ['ADMIN', 'SUPER_ADMIN', 'MASTER_ADMIN'].includes(profile?.role)
-              ? <AdminPage onNavigate={routeNavigate} supportRequestOnly />
+              ? <AdminSupportRequestsPage onNavigate={routeNavigate} />
               : <Navigate to="/" replace />
           } />
 
@@ -451,9 +505,9 @@ function AppContent() {
         </Routes>
       </main>
 
-      {showFooter && <Footer onNavigate={routeNavigate} />}
+      {showFooter && !isAdminWorkspace && <Footer onNavigate={routeNavigate} />}
 
-      {showBottomNav && <BottomNav current={currentPage} onNavigate={routeNavigate} unreadCount={messageUnreadCount} />}
+      {showBottomNav && !isAdminWorkspace && <BottomNav current={currentPage} onNavigate={routeNavigate} unreadCount={messageUnreadCount} />}
     </div>
   );
 }

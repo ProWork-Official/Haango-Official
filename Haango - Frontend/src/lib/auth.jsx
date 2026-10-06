@@ -17,6 +17,7 @@ function normalizeProfile(user) {
     name: user.name || user.full_name || 'User',
     email: user.email,
     phone: user.phone,
+    whatsappMarketingOptIn: Boolean(user.whatsappMarketingOptIn),
     user_type: String(user.role || 'CUSTOMER').toLowerCase(),
     role: user.role || 'CUSTOMER',
     is_buddy: Boolean(user.isBuddy || user.is_buddy || user.role === 'BUDDY'),
@@ -108,11 +109,12 @@ export function AuthProvider({ children }) {
     hydrateSession();
   }, []);
 
-  const signUp = async ({ fullName, email, phone, password, userType, otp, signupCode }) => {
+  const signUp = async ({ fullName, email, phone, password, userType, otp, signupCode, whatsappMarketingOptIn = false }) => {
     const payload = {
       name: fullName,
       email,
       phone,
+      whatsappMarketingOptIn: whatsappMarketingOptIn === true,
       password,
       role: String(userType || 'customer').toUpperCase(),
       otp,

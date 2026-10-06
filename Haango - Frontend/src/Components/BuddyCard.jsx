@@ -15,18 +15,21 @@ export default function BuddyCard({
 }) {
   const shareBuddy = async (event) => {
     event.stopPropagation();
-    const shareUrl = `${window.location.origin}/profile?buddyId=${encodeURIComponent(buddy.id)}`;
+    const shareUrl = new URL('/profile', window.location.origin);
+    shareUrl.searchParams.set('buddyId', buddy.id);
+    shareUrl.searchParams.set('utm_source', 'haango_share');
+    shareUrl.searchParams.set('utm_medium', 'share');
     const shareData = {
       title: `${buddy.name} on Haango`,
       text: buddy.tagline || `Meet ${buddy.name} on Haango.`,
-      url: shareUrl,
+      url: shareUrl.toString(),
     };
 
     try {
       if (navigator.share) {
         await navigator.share(shareData);
       } else if (navigator.clipboard) {
-        await navigator.clipboard.writeText(shareUrl);
+        await navigator.clipboard.writeText(shareUrl.toString());
       }
     } catch (shareError) {
       if (shareError.name !== 'AbortError') {

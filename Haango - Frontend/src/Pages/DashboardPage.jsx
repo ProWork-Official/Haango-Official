@@ -32,6 +32,7 @@ export default function DashboardPage({ onNavigate, onSelectBuddy, onMessage, un
   const { profile, updateProfile, dismissProfilePrompt } = useAuth();
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [whatsappPreferenceMessage, setWhatsappPreferenceMessage] = useState('');
   const [name, setName] = useState(profile?.name || profile?.full_name || '');
   const [dob, setDob] = useState(profile?.dob || '');
   const [hobbiesText, setHobbiesText] = useState((profile?.hobbies || []).join(', '));
@@ -193,6 +194,15 @@ export default function DashboardPage({ onNavigate, onSelectBuddy, onMessage, un
     }
   };
 
+  const updateWhatsappPreference = async (enabled) => {
+    if (saving) return;
+    setSaving(true);
+    setWhatsappPreferenceMessage('');
+    const result = await updateProfile({ whatsappMarketingOptIn: enabled });
+    setWhatsappPreferenceMessage(result.error || 'Preference updated.');
+    setSaving(false);
+  };
+
   const toggleHobby = (hobby) => {
     const selected = hobbiesText.split(',').map((item) => item.trim()).filter(Boolean);
     const nextSelected = selected.includes(hobby)
@@ -252,7 +262,8 @@ export default function DashboardPage({ onNavigate, onSelectBuddy, onMessage, un
             </button>
             <p className="text-xs text-ink-400">Your referral code</p>
             <p className="mt-2 font-display text-2xl font-extrabold tracking-wider text-ink-900">{profile?.referral_code || 'Available after next login'}</p>
-            <p className="mt-1 text-xs text-ink-500">{referralCopied ? 'Copied to clipboard.' : 'Share it with friends. Earn ₹100 when their first booking is ₹750 or more.'}</p>
+            <p className="mt-1 text-xs text-ink-500">{referralCopied ? 'Copied to clipboard.' : 'Earn ₹100 when a friend completes their first booking of ₹500 or more.'}</p>
+            <button type="button" onClick={() => onNavigate('/referrals')} className="mt-4 inline-flex items-center gap-2 text-xs font-bold text-coral-600 hover:text-coral-700">View referral activity <ChevronRight size={14} /></button>
           </div>
         </div>
 
@@ -376,6 +387,10 @@ export default function DashboardPage({ onNavigate, onSelectBuddy, onMessage, un
                   )}
                   {message && <p className="mt-3 text-sm text-coral-600">{message}</p>}
                 </div>
+                <label className="flex items-start gap-3 rounded-2xl bg-ink-50 p-4 sm:col-span-2">
+                  <input type="checkbox" checked={Boolean(profile?.whatsappMarketingOptIn)} disabled={saving} onChange={(event) => updateWhatsappPreference(event.target.checked)} className="mt-1 h-4 w-4 shrink-0 accent-[#ff681f]" />
+                  <span className="min-w-0"><span className="block text-sm font-semibold text-ink-900">WhatsApp offers</span><span className="mt-1 block text-xs leading-relaxed text-ink-500">Receive occasional offers from Haango. Reply STOP to opt out at any time.</span>{whatsappPreferenceMessage && <span className="mt-2 block text-xs text-coral-600" role="status">{whatsappPreferenceMessage}</span>}</span>
+                </label>
               </div>
             </div>
           </div>

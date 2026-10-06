@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Plus, Trash2, Ticket } from 'lucide-react';
 import { apiRequest } from '../lib/api';
+import AdminLayout from '../Components/AdminLayout';
 
 const currency = (value) => `₹${Number(value || 0).toLocaleString('en-IN')}`;
 
@@ -46,8 +47,8 @@ export default function AdminCouponsPage({ onNavigate }) {
   };
 
   return (
-    <div className="min-h-screen bg-ink-50 pb-20 pt-16 md:pt-18">
-      <div className="container-max section-pad py-8">
+    <AdminLayout activePage="coupons" onNavigate={onNavigate}>
+      <main className="mx-auto w-full max-w-370 flex-1 px-4 py-8 sm:px-6 xl:px-8">
         <button type="button" onClick={() => onNavigate('admin')} className="btn-ghost mb-5"><ArrowLeft size={16} /> Back to admin</button>
         <div className="mb-8 flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-coral-50 text-coral-500"><Ticket size={21} /></div>
@@ -63,7 +64,7 @@ export default function AdminCouponsPage({ onNavigate }) {
 
         {error && <p className="mb-5 rounded-2xl bg-red-50 p-4 text-sm text-red-600">{error}</p>}
         <div className="card overflow-hidden"><div className="border-b border-ink-100 p-5"><h2 className="font-display text-lg font-bold text-ink-900">Active coupons</h2></div><div className="divide-y divide-ink-100">{coupons.length ? coupons.map((coupon) => <div key={coupon._id} className="flex flex-wrap items-center justify-between gap-4 p-5"><div><p className="font-display font-bold tracking-wider text-ink-900">{coupon.code}</p><p className="mt-1 text-sm text-ink-500">{coupon.type === 'BUDDY_SIGNUP' ? 'Buddy signup coupon' : coupon.type === 'USER_SIGNUP' ? 'User signup coupon' : 'Booking discount coupon'} · {currency(coupon.amount)}</p></div><button type="button" onClick={() => deleteCoupon(coupon)} className="btn-ghost text-red-600"><Trash2 size={16} /> Delete coupon</button></div>) : <p className="p-5 text-sm text-ink-500">No coupons added yet.</p>}</div></div>
-      </div>
-    </div>
+      </main>
+    </AdminLayout>
   );
 }
