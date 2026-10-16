@@ -1,16 +1,16 @@
 import {
   Heart,
   Instagram,
-  Linkedin,
+  Facebook,
   Shield,
-  Twitter,
+  Youtube,
 } from 'lucide-react';
 import WTextLogo from '../Assets/F_Transparent_W.png';
 
 const socialLinks = [
-  { label: 'Instagram', Icon: Instagram, href: 'https://www.instagram.com/haango_offical/' },
-  { label: 'Download Haango on Google Play', Icon: Twitter, href: 'https://play.google.com/store/apps/details?id=com.haango.app' },
-  { label: 'Download Haango on Google Play', Icon: Linkedin, href: 'https://play.google.com/store/apps/details?id=com.haango.app' },
+  { label: 'Instagram', Icon: Instagram, href: 'http://instagram.com/haango_official/' },
+  { label: 'Facebook', Icon: Facebook, href: 'https://www.facebook.com/haangoofficial' },
+  { label: 'YouTube', Icon: Youtube, href: 'https://www.youtube.com/@haangoofficial/shorts' },
 ];
 
 export default function Footer({ onNavigate }) {

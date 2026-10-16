@@ -117,6 +117,7 @@ function AppContent() {
   const [prevPage, setPrevPage] = useState('/');
   const [pendingAuthPath, setPendingAuthPath] = useState(null);
   const browserNotificationIdsRef = useRef(new Set());
+  const visitSessionRef = useRef(null);
 
   const refreshUnreadCount = () => {
     if (!user) return;
@@ -195,41 +196,100 @@ function AppContent() {
   }, [profile?.id, user]);
 
   useEffect(() => {
+    if (location.pathname.startsWith('/admin')) return undefined;
+
     const storageKey = 'haango_visitor_id';
     let visitorId = localStorage.getItem(storageKey);
     if (!visitorId) {
       visitorId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       localStorage.setItem(storageKey, visitorId);
     }
-    const startedAt = Date.now();
-    const visitId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    const sessionKey = 'haango_visit_session_id';
+    const startedKey = 'haango_visit_session_started_at';
+    const pagesKey = 'haango_visit_session_pages';
+    const pagePath = `${location.pathname}${location.search}`;
+
+    if (!visitSessionRef.current) {
+      visitSessionRef.current = sessionStorage.getItem(sessionKey)
+        || (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      sessionStorage.setItem(sessionKey, visitSessionRef.current);
+      sessionStorage.setItem(startedKey, String(Date.now()));
+    }
+
+    const existingPages = JSON.parse(sessionStorage.getItem(pagesKey) || '[]');
+    const pageHistory = Array.isArray(existingPages) ? existingPages : [];
+    const lastPage = pageHistory[pageHistory.length - 1];
+    const nextPageEntry = { page: pagePath, timeSpent: 0, timestamp: new Date().toISOString() };
+
+    if (!lastPage || lastPage.page !== pagePath) {
+      pageHistory.push(nextPageEntry);
+      sessionStorage.setItem(pagesKey, JSON.stringify(pageHistory.slice(-30)));
+    }
+
+    const startedAt = Number(sessionStorage.getItem(startedKey) || Date.now());
+    const visitId = visitSessionRef.current;
     const track = () => {
       const timeSpent = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
+      const currentPages = JSON.parse(sessionStorage.getItem(pagesKey) || '[]');
       apiRequest('/analytics/track', {
         method: 'POST',
-        body: JSON.stringify({ visitorId, visitId, page: location.pathname, landingUrl: `${location.pathname}${location.search}`, timeSpent, referrer: document.referrer }),
+        body: JSON.stringify({
+          visitorId,
+          visitId,
+          page: pagePath,
+          landingUrl: pagePath,
+          timeSpent,
+          referrer: document.referrer,
+          pagesVisited: Array.isArray(currentPages) ? currentPages.slice(-30) : [],
+          userName: profile?.full_name || profile?.name || user?.name || user?.full_name || null,
+        }),
         keepalive: true,
       }).catch(() => {});
     };
+
     apiRequest('/analytics/track', {
       method: 'POST',
-      body: JSON.stringify({ visitorId, visitId, page: location.pathname, landingUrl: `${location.pathname}${location.search}`, timeSpent: 0, referrer: document.referrer }),
+      body: JSON.stringify({
+        visitorId,
+        visitId,
+        page: pagePath,
+        landingUrl: pagePath,
+        timeSpent: 0,
+        referrer: document.referrer,
+        pagesVisited: pageHistory.slice(-30),
+        userName: profile?.full_name || profile?.name || user?.name || user?.full_name || null,
+      }),
     }).catch(() => {});
+
     const heartbeat = window.setInterval(() => {
       if (document.visibilityState === 'visible') track();
     }, 60 * 1000);
+
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') track();
     };
+
+    const endSession = () => {
+      track();
+      sessionStorage.removeItem(sessionKey);
+      sessionStorage.removeItem(startedKey);
+      sessionStorage.removeItem(pagesKey);
+      visitSessionRef.current = null;
+    };
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('pagehide', track);
+    window.addEventListener('pagehide', endSession);
+
     return () => {
       window.clearInterval(heartbeat);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('pagehide', track);
-      track();
+      window.removeEventListener('pagehide', endSession);
+      if (!document.visibilityState || document.visibilityState === 'hidden') {
+        endSession();
+      }
     };
-  }, [location.pathname, location.search]);
+  }, [location.pathname, location.search, profile?.full_name, profile?.name, user?.name, user?.full_name]);
 
   const currentPage = getPageKeyFromPath(location.pathname);
 

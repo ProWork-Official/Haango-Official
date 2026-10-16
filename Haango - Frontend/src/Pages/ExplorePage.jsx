@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Search,
   X,
@@ -25,6 +26,21 @@ const hobbyIconMap = {
   events: Ticket,
   'explore the city': MapPin,
 };
+
+const activityFilters = {
+  movie: { label: 'Movies', matches: ['movie', 'movies', 'movie night'] },
+  shopping: { label: 'Shopping', matches: ['shopping'] },
+  coffee: { label: 'Coffee', matches: ['coffee', 'coffee & conversation', 'coffee & conversations'] },
+  dining: { label: 'Lunch & Dinner', matches: ['dining', 'lunch / dinner'] },
+  events: { label: 'Events', matches: ['events'] },
+  'explore-city': { label: 'Explore the City', matches: ['explore the city', 'explore city'] },
+  gaming: { label: 'Gaming', matches: ['gaming'] },
+  sports: { label: 'Activities', matches: ['sports', 'activities', 'play something'] },
+};
+
+function normalizeActivity(value) {
+  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
 
 function getHobbyIcon(hobby) {
   const key = String(hobby || '').trim().toLowerCase();
@@ -62,6 +78,7 @@ function isBuddyAvailableNow(buddy = {}) {
 }
 
 const ExplorePage = ({ onSelectBuddy }) => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [buddies, setBuddies] = useState([]);
   const [hobbyOptions, setHobbyOptions] = useState([]);
@@ -72,6 +89,10 @@ const ExplorePage = ({ onSelectBuddy }) => {
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [likedBuddyIds, setLikedBuddyIds] = useState([]);
+  const requestedActivity = searchParams.get('activity');
+  const activeActivity = Object.hasOwn(activityFilters, requestedActivity || '')
+    ? activityFilters[requestedActivity]
+    : null;
 
   useEffect(() => {
     let active = true;
@@ -153,6 +174,7 @@ const ExplorePage = ({ onSelectBuddy }) => {
       const city = String(buddy.location || '').toLowerCase();
       const languages = Array.isArray(buddy.languages) ? buddy.languages.map((language) => String(language).toLowerCase()) : [];
       const hobbies = Array.isArray(buddy.hobbies) ? buddy.hobbies.map((hobby) => String(hobby).toLowerCase()) : [];
+      const activities = Array.isArray(buddy.activities) ? buddy.activities : [];
 
       if (selectedCity && city !== selectedCity.toLowerCase()) {
         return false;
@@ -160,6 +182,15 @@ const ExplorePage = ({ onSelectBuddy }) => {
 
       if (selectedHobbies.length > 0 && !selectedHobbies.some((hobby) => hobbies.includes(String(hobby).toLowerCase()))) {
         return false;
+      }
+
+      if (activeActivity) {
+        const buddyActivities = [...hobbies, ...activities].map(normalizeActivity);
+        const matchingActivities = activeActivity.matches.map(normalizeActivity);
+
+        if (!buddyActivities.some((activity) => matchingActivities.includes(activity))) {
+          return false;
+        }
       }
 
       if (Number(buddy.rating || 0) < minRating) {
@@ -188,7 +219,7 @@ const ExplorePage = ({ onSelectBuddy }) => {
 
       return true;
     });
-  }, [buddies, selectedCity, selectedHobbies, minRating, availableOnly, searchQuery]);
+  }, [buddies, selectedCity, selectedHobbies, minRating, availableOnly, searchQuery, activeActivity]);
 
   const toggleHobby = (hobby) => {
     setSelectedHobbies((current) => current.includes(hobby)
@@ -209,10 +240,12 @@ const ExplorePage = ({ onSelectBuddy }) => {
     setAvailableOnly(false);
     setSearchQuery('');
     setSearchInput('');
+    setSearchParams({}, { replace: true });
   };
 
   const activeFilterCount =
     selectedHobbies.length +
+    (activeActivity ? 1 : 0) +
     (selectedCity ? 1 : 0) +
     (minRating > 0 ? 1 : 0) +
     (availableOnly ? 1 : 0);
@@ -252,6 +285,18 @@ const ExplorePage = ({ onSelectBuddy }) => {
           </form>
 
           <div className="flex items-center gap-2 mt-4 flex-wrap">
+            {activeActivity && (
+              <button
+                type="button"
+                onClick={() => setSearchParams({}, { replace: true })}
+                className="chip border bg-[#0F1117] text-white border-[#0F1117]"
+                aria-label={`Remove ${activeActivity.label} filter`}
+              >
+                {activeActivity.label}
+                <X size={14} />
+              </button>
+            )}
+
             <button
               type="button"
               onClick={() => setAvailableOnly(!availableOnly)}

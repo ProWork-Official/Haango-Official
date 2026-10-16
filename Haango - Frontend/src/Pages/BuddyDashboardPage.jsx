@@ -20,6 +20,7 @@ import { apiRequest } from '../lib/api';
 import WalletPanel from '../Components/WalletPanel';
 import { requestLocationPermission } from '../lib/location';
 import { getNextUpcomingBooking } from '../lib/bookingLists';
+import { buddyCityOptions, getBuddyCitySelection, indianStateOptions, resolveBuddyCity } from '../lib/buddyLocationOptions';
 
 function formatCurrency(value = 0) {
   return new Intl.NumberFormat('en-IN', {
@@ -61,6 +62,8 @@ const emptyProfile = {
   about: '',
   summary: '',
   city: '',
+  otherCity: '',
+  state: '',
   languages: '',
   hobbies: [],
   hobbiesText: '',
@@ -71,7 +74,6 @@ const emptyProfile = {
   availability: [{ day: 'monday', startTime: '09:00', endTime: '18:00', isAvailable: true }],
 };
 
-const cityOptions = ['Prayagraj', 'Lucknow', 'Greater Noida', 'Noida', 'Kanpur'];
 const languageOptions = ['English', 'Hindi', 'Bengali', 'Marathi', 'Tamil', 'Telugu', 'Urdu'];
 const responseTimeOptions = [
   'Usually replies within 15 minutes',
@@ -82,6 +84,8 @@ const responseTimeOptions = [
 const hobbyOptions = ['Movie Night', 'Coffee & Conversation', 'Shopping', 'Lunch / Dinner', 'Events', 'Explore the City'];
 
 function profileToForm(profile, user) {
+  const cityFields = getBuddyCitySelection(profile?.city || user?.city || '');
+
   return {
     ...emptyProfile,
     displayName: profile?.displayName || user?.name || '',
@@ -89,7 +93,8 @@ function profileToForm(profile, user) {
     gender: profile?.gender || user?.gender || 'PREFER_NOT_TO_SAY',
     about: profile?.about || '',
     summary: profile?.summary || '',
-    city: profile?.city || user?.city || '',
+    ...cityFields,
+    state: profile ? profile.state || 'Uttar Pradesh' : '',
     languages: Array.isArray(profile?.languages) ? profile.languages.join(', ') : '',
     hobbies: Array.isArray(profile?.hobbies) ? profile.hobbies : [],
     hobbiesText: Array.isArray(profile?.hobbies) ? profile.hobbies.join(', ') : '',
@@ -237,11 +242,17 @@ function ProfileEditor({ profile, user, loading, onSaved }) {
       setError('Upload at least 2 photos to create your buddy profile.');
       return;
     }
+    if (!resolveBuddyCity(form.city, form.otherCity)) {
+      setError('Enter your city.');
+      return;
+    }
 
     setSaving(true);
     try {
+      const { otherCity, ...profileFields } = form;
       const payload = {
-        ...form,
+        ...profileFields,
+        city: resolveBuddyCity(form.city, otherCity),
         age: Number(form.age),
         hourlyRate: Number(form.hourlyRate),
         languages: form.languages.split(',').map((language) => language.trim()).filter(Boolean),
@@ -329,11 +340,30 @@ function ProfileEditor({ profile, user, loading, onSaved }) {
                           aria-label="Custom hobbies"
                         />
                       </div>
-            <label className="text-sm font-medium text-ink-700">
-              City
-              <select className={inputClass} value={form.city} onChange={(event) => updateField('city', event.target.value)} required>
+            <div>
+              <label className="text-sm font-medium text-ink-700" htmlFor="buddy-city">City</label>
+              <select id="buddy-city" className={inputClass} value={form.city} onChange={(event) => updateField('city', event.target.value)} required>
                 <option value="">Select your city</option>
-                {cityOptions.map((city) => <option key={city} value={city}>{city}</option>)}
+                {buddyCityOptions.map((city) => <option key={city} value={city}>{city}</option>)}
+                <option value="Other">Other</option>
+              </select>
+              {form.city === 'Other' && (
+                <input
+                  className={inputClass}
+                  value={form.otherCity}
+                  onChange={(event) => updateField('otherCity', event.target.value)}
+                  placeholder="Enter your city"
+                  aria-label="Enter your city"
+                  maxLength="100"
+                  required
+                />
+              )}
+            </div>
+            <label className="text-sm font-medium text-ink-700">
+              State / Union Territory
+              <select className={inputClass} value={form.state} onChange={(event) => updateField('state', event.target.value)} required>
+                <option value="">Select your state</option>
+                {indianStateOptions.map((state) => <option key={state} value={state}>{state}</option>)}
               </select>
             </label>
             <label className="text-sm font-medium text-ink-700">

@@ -408,7 +408,7 @@ function HomePage({ onNavigate, onSelectActivity, onSelectBuddy }) {
                 key={card.id}
                 onClick={() => {
                   onSelectActivity(card.id);
-                  onNavigate('explore');
+                  onNavigate(`/explore?activity=${encodeURIComponent(card.id)}`);
                 }}
                 className="no-tap group relative overflow-hidden rounded-3xl text-left shadow-[0_6px_20px_rgba(83,67,43,0.07)] transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_16px_36px_rgba(83,67,43,0.14)] animate-fade-up"
                 style={{

@@ -125,7 +125,7 @@ export default function ProfilePage({
       </button>
 
       {/* Gallery */}
-      <div className="relative h-[28rem] sm:mx-auto sm:w-[375px] sm:rounded-3xl md:h-96 overflow-hidden ">
+      <div className="relative h-[32rem] sm:mx-auto sm:w-[375px] sm:rounded-3xl md:h-96 overflow-hidden ">
         <img
           src={buddy.gallery[activeImage]}
           alt={buddy.name}
@@ -150,12 +150,12 @@ export default function ProfilePage({
       </div>
 
       {/* Thumbnails */}
-      <div className="container-max section-pad mt-4 flex gap-3">
+      <div className={`container-max section-pad mt-4 flex flex-nowrap gap-3 ${buddy.gallery.length > 4 ? '-mx-2 overflow-x-auto px-2 py-2 scrollbar-hide' : ''}`}>
         {buddy.gallery.map((img, i) => (
           <button
             key={i}
             onClick={() => setActiveImage(i)}
-            className={`no-tap w-20 h-20 rounded-2xl overflow-hidden transition-all duration-200 ${
+            className={`no-tap w-20 h-20 shrink-0 rounded-2xl overflow-hidden transition-all duration-200 ${
               i === activeImage
                 ? 'ring-2 ring-coral-500 ring-offset-2'
                 : 'opacity-60 hover:opacity-100'
@@ -217,7 +217,7 @@ export default function ProfilePage({
               </div>
 
               <p className="mt-4 text-lg text-ink-600 leading-relaxed">
-                "{buddy.tagline}"
+                {buddy.tagline}
               </p>
             </div>
 
@@ -247,6 +247,53 @@ export default function ProfilePage({
                     {interest}
                   </span>
                 ))}
+              </div>
+            </div>
+
+            <div className="lg:hidden card p-6 shadow-lift">
+              <div className="flex items-baseline justify-between mb-1">
+                <span className="font-display font-extrabold text-3xl text-ink-900">
+                  ₹{buddy.pricePerHour}
+                </span>
+                <span className="text-sm text-ink-400">/hour</span>
+              </div>
+
+              <div className="flex items-center gap-2 mt-2">
+                {buddy.available ? (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-[#39c768] animate-pulse" />
+                    <span className="text-sm font-medium text-[#39c768]">Available to book</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-ink-300" />
+                    <span className="text-sm font-medium text-ink-400">Currently unavailable</span>
+                  </>
+                )}
+              </div>
+
+              <button
+                onClick={() => onBook(buddy.id)}
+                disabled={!buddy.available}
+                className="btn-primary w-full mt-5 text-base py-4 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Book {buddy.name}
+                <ChevronRight size={18} />
+              </button>
+
+              <div className="mt-5 pt-5 border-t border-ink-100 space-y-3">
+                <div className="flex items-center gap-2.5 text-sm text-ink-500">
+                  <Shield size={16} className="text-teal-500" />
+                  Identity verified by Haango
+                </div>
+                <div className="flex items-center gap-2.5 text-sm text-ink-500">
+                  <BadgeCheck size={16} className="text-teal-500" />
+                  {buddy.outings} completed outings
+                </div>
+                <div className="flex items-center gap-2.5 text-sm text-ink-500">
+                  <Star size={16} className="text-amber-400" />
+                  {buddy.rating} average rating
+                </div>
               </div>
             </div>
 
@@ -400,9 +447,9 @@ export default function ProfilePage({
 
           {/* Sidebar - Booking Card */}
           <div className="lg:col-span-1">
-            <div className="lg:sticky lg:top-24 space-y-4">
+            <div className="lg:sticky lg:top-24 space-y-4 ">
               {/* Booking Card */}
-              <div className="card p-6 shadow-lift">
+              <div className="hidden lg:block card p-6 shadow-lift">
                 <div className="flex items-baseline justify-between mb-1">
                   <span className="font-display font-extrabold text-3xl text-ink-900">
                     ₹{buddy.pricePerHour}
@@ -500,7 +547,7 @@ export default function ProfilePage({
         <div className="flex items-center gap-3">
           <div>
             <div className="font-display font-bold text-lg text-ink-900">
-              ₹{buddy.pricePerHour}
+              ₹{buddy.pricePerHour}jj
               <span className="text-xs font-normal text-ink-400">
                 /hr
               </span>

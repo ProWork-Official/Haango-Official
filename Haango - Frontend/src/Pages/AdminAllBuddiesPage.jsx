@@ -3,6 +3,7 @@ import { Activity, ArrowLeft, BadgeCheck, Banknote, ChevronLeft, ChevronRight, E
 import { apiRequest } from '../lib/api';
 import HaangoDialog from '../Components/HaangoDialog';
 import AdminLayout from '../Components/AdminLayout';
+import { buddyCityOptions, getBuddyCitySelection, indianStateOptions, resolveBuddyCity } from '../lib/buddyLocationOptions';
 
 export default function AdminAllBuddiesPage({ onNavigate }) {
   const [buddies, setBuddies] = useState([]);
@@ -78,13 +79,18 @@ export default function AdminAllBuddiesPage({ onNavigate }) {
       return;
     }
     setEditError('');
+    if (!resolveBuddyCity(editing.city, editing.otherCity)) {
+      setEditError('Enter the buddy city.');
+      return;
+    }
     try {
       const payload = {
         displayName: editing.displayName,
         ...(editing.age === '' || editing.age == null ? {} : { age: Number(editing.age) }),
         gender: editing.gender,
         hobbies: editing.hobbies.split(',').map((item) => item.trim()).filter(Boolean),
-        city: editing.city,
+        city: resolveBuddyCity(editing.city, editing.otherCity),
+        state: editing.state,
         languages: editing.languages.split(',').map((item) => item.trim()).filter(Boolean),
         profileImages: editing.profileImages,
         summary: editing.summary,
@@ -108,9 +114,12 @@ export default function AdminAllBuddiesPage({ onNavigate }) {
 
   const openEditForm = (buddy, account) => {
     setEditError('');
+    const cityFields = getBuddyCitySelection(buddy.city || account.city || '');
     setEditing({
       ...buddy,
       userId: account,
+      ...cityFields,
+      state: buddy.state || 'Uttar Pradesh',
       hobbies: (Array.isArray(buddy.hobbies) ? buddy.hobbies : Array.isArray(buddy.interests) ? buddy.interests : []).join(', '),
       languages: (Array.isArray(buddy.languages) ? buddy.languages : []).join(', '),
       profileImages: Array.isArray(buddy.profileImages) && buddy.profileImages.length
@@ -361,7 +370,8 @@ export default function AdminAllBuddiesPage({ onNavigate }) {
             </div>
             <div className="relative z-10 mt-4 space-y-3 rounded-xl border border-[#e7edf7] bg-white/95 p-3.5">
               <div className="flex items-center justify-between gap-3"><span className="text-xs text-ink-500">Age</span><strong className="text-sm text-ink-900">{editing.age || '—'}</strong></div>
-              <div className="flex items-center justify-between gap-3"><span className="text-xs text-ink-500">City</span><strong className="max-w-32 truncate text-sm text-ink-900">{editing.city || '—'}</strong></div>
+              <div className="flex items-center justify-between gap-3"><span className="text-xs text-ink-500">City</span><strong className="max-w-32 truncate text-sm text-ink-900">{resolveBuddyCity(editing.city, editing.otherCity) || '—'}</strong></div>
+              <div className="flex items-center justify-between gap-3"><span className="text-xs text-ink-500">State</span><strong className="max-w-32 truncate text-sm text-ink-900">{editing.state || 'Uttar Pradesh'}</strong></div>
               <div className="flex items-center justify-between gap-3 border-t border-[#edf1f7] pt-2.5"><span className="text-xs text-ink-500">Hourly rate</span><strong className="font-display text-sm font-extrabold text-ink-900">₹{Number(editing.hourlyRate || 0).toLocaleString('en-IN')}/hr</strong></div>
             </div>
             <div className="relative z-10 mt-3 rounded-xl border border-[#e7edf7] bg-white/95 p-3.5">
@@ -383,7 +393,16 @@ export default function AdminAllBuddiesPage({ onNavigate }) {
             <label className="text-sm font-medium text-ink-700">Display name<input value={editing.displayName || ''} onChange={(event) => setEditing({ ...editing, displayName: event.target.value })} className="input-field mt-1" minLength="2" maxLength="100" required /></label>
             <label className="text-sm font-medium text-ink-700">Age<input type="number" min="18" max="120" value={editing.age ?? ''} onChange={(event) => setEditing({ ...editing, age: event.target.value })} className="input-field mt-1" /></label>
             <label className="text-sm font-medium text-ink-700">Gender<select value={editing.gender || 'PREFER_NOT_TO_SAY'} onChange={(event) => setEditing({ ...editing, gender: event.target.value })} className="input-field mt-1"><option value="MALE">Male</option><option value="FEMALE">Female</option><option value="OTHER">Other</option><option value="PREFER_NOT_TO_SAY">Prefer not to say</option></select></label>
-            <label className="text-sm font-medium text-ink-700">City<input value={editing.city || ''} onChange={(event) => setEditing({ ...editing, city: event.target.value })} className="input-field mt-1" maxLength="100" /></label>
+            <div>
+              <label className="text-sm font-medium text-ink-700" htmlFor="admin-buddy-city">City</label>
+              <select id="admin-buddy-city" value={editing.city || ''} onChange={(event) => setEditing({ ...editing, city: event.target.value })} className="input-field mt-1" required>
+                <option value="">Select city</option>
+                {buddyCityOptions.map((city) => <option key={city} value={city}>{city}</option>)}
+                <option value="Other">Other</option>
+              </select>
+              {editing.city === 'Other' && <input value={editing.otherCity || ''} onChange={(event) => setEditing({ ...editing, otherCity: event.target.value })} className="input-field mt-1" placeholder="Enter city" maxLength="100" required />}
+            </div>
+            <label className="text-sm font-medium text-ink-700">State / Union Territory<select value={editing.state || ''} onChange={(event) => setEditing({ ...editing, state: event.target.value })} className="input-field mt-1" required><option value="">Select state</option>{indianStateOptions.map((state) => <option key={state} value={state}>{state}</option>)}</select></label>
             <label className="text-sm font-medium text-ink-700">Hobbies <span className="font-normal text-ink-400">(comma-separated)</span><input value={editing.hobbies} onChange={(event) => setEditing({ ...editing, hobbies: event.target.value })} className="input-field mt-1" /></label>
             <label className="text-sm font-medium text-ink-700">Languages <span className="font-normal text-ink-400">(comma-separated)</span><input value={editing.languages} onChange={(event) => setEditing({ ...editing, languages: event.target.value })} className="input-field mt-1" /></label>
               </div>

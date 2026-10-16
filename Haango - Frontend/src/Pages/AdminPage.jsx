@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Activity, AlertCircle, ArrowLeft, ArrowRight, BadgeCheck, Calendar, Check, ChevronRight, Headset, IndianRupee, Shield, Ticket, Users } from 'lucide-react';
+import { Activity, AlertCircle, ArrowLeft, ArrowRight, BadgeCheck, Bell, Calendar, Check, ChevronRight, Headset, IndianRupee, Shield, Ticket, Users } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import AdminLayout from '../Components/AdminLayout';
 
@@ -89,6 +89,9 @@ export default function AdminPage({ onNavigate }) {
   const [analytics, setAnalytics] = useState({ daily: null, trend: [], pages: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [withdrawalNotifications, setWithdrawalNotifications] = useState([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
 
   const loadData = async () => {
     try {
@@ -132,9 +135,27 @@ export default function AdminPage({ onNavigate }) {
         if (active) setLoading(false);
       }
     };
+
+    const loadNotifications = async () => {
+      try {
+        setNotificationsLoading(true);
+        const response = await apiRequest('/admin/withdrawals?status=PAID&limit=20');
+        if (!active) return;
+        const items = Array.isArray(response) ? response : response?.data || [];
+        setWithdrawalNotifications(items.filter((withdrawal) => withdrawal?.payoutMethod === 'BANK' && Number(withdrawal?.amount || 0) > 0).slice(0, 6));
+      } catch {
+        if (active) setWithdrawalNotifications([]);
+      } finally {
+        if (active) setNotificationsLoading(false);
+      }
+    };
+
     fetchData();
+    loadNotifications();
     return () => { active = false; };
   }, []);
+
+  const hasBankWithdrawalNotification = withdrawalNotifications.length > 0;
 
   const reviewCancellation = async (request, status) => {
     try {
@@ -164,6 +185,47 @@ export default function AdminPage({ onNavigate }) {
           <div className="flex min-h-18 flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 xl:px-8">
             <div className="flex items-center gap-2 text-sm text-ink-500"><span className="font-semibold text-ink-900">Admin</span><ChevronRight size={15} /><span>Dashboard</span></div>
             <div className="flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <button type="button" onClick={() => setNotificationsOpen((current) => !current)} className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#e8edf6] bg-white text-ink-600 transition hover:bg-blue-50 hover:text-blue-700" aria-label="View bank withdrawal notifications">
+                  <Bell size={17} />
+                  {hasBankWithdrawalNotification && <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-red-500" />}
+                </button>
+                {notificationsOpen && (
+                  <div className="absolute right-0 top-full z-40 mt-2 w-76 overflow-hidden rounded-2xl border border-[#e8edf6] bg-white shadow-2xl">
+                    <div className="border-b border-[#edf1f7] px-4 py-3">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-400">Bank withdrawals</p>
+                      <p className="mt-1 text-sm font-bold text-ink-900">Buddy payout alerts</p>
+                    </div>
+                    <div className="max-h-88 overflow-y-auto">
+                      {notificationsLoading ? (
+                        <p className="px-4 py-6 text-sm text-ink-500">Loading payouts…</p>
+                      ) : hasBankWithdrawalNotification ? (
+                        withdrawalNotifications.map((withdrawal) => {
+                          const buddyName = withdrawal?.userId?.name || 'Buddy';
+                          const buddyEmail = withdrawal?.userId?.email || 'No email';
+                          const withdrawnOn = withdrawal?.createdAt ? new Date(withdrawal.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'Unknown date';
+                          return (
+                            <div key={withdrawal?._id || `${buddyName}-${withdrawal?.amount}`} className="border-b border-[#edf1f7] px-4 py-3 last:border-b-0">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-semibold text-ink-900">{buddyName}</p>
+                                  <p className="mt-0.5 text-xs text-ink-500">{buddyEmail}</p>
+                                </div>
+                                <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700">PAID</span>
+                              </div>
+                              <p className="mt-2 font-display text-lg font-extrabold text-ink-900">₹{Number(withdrawal?.amount || 0).toLocaleString('en-IN')}</p>
+                              <p className="mt-1 text-[11px] text-ink-500">Withdrawn on {withdrawnOn}</p>
+                              <p className="mt-1 text-[11px] text-ink-500">Bank account payout</p>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <p className="px-4 py-6 text-sm text-ink-500">No bank withdrawals have been made yet.</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
               <button onClick={() => onNavigate('/admin/support-requests')} className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-blue-700"><Headset size={15} /> Support tickets</button>
               <button onClick={() => onNavigate('/admin/coupons')} className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-4 py-2.5 text-xs font-bold text-blue-700 transition hover:bg-blue-50"><Ticket size={15} /> Manage coupons</button>
               <button onClick={() => onNavigate('home')} className="inline-flex items-center gap-2 rounded-full border border-[#e8edf6] px-4 py-2.5 text-xs font-semibold text-ink-600 transition hover:bg-[#f7f9fd]"><ArrowLeft size={15} /> Back to Haango</button>
