@@ -6,6 +6,13 @@ const pageVisitSchema = new mongoose.Schema(
     visitorId: { type: String, required: true, index: true },
     visitId: { type: String, index: true },
     page: { type: String, required: true, index: true },
+    userName: { type: String, index: true },
+    pagesVisited: [{
+      page: { type: String, required: true },
+      timestamp: { type: Date, default: Date.now },
+      timeSpent: { type: Number, default: 0 },
+    }],
+    lastSeenAt: { type: Date, default: Date.now, index: true },
     timeSpent: { type: Number, default: 0 }, // in seconds
     referrer: { type: String },
     acquisitionSource: {

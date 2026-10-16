@@ -1,7 +1,15 @@
 import PageVisit from '../models/PageVisit.js';
+import User from '../models/User.js';
 import { notFound } from '../utils/errors.js';
 import { classifyAcquisitionSource, normalizeReferrerOrigin } from '../utils/acquisitionSource.js';
 import { lookupIpLocation } from './ipGeolocationService.js';
+
+export function resolveVisitorDisplayName(userName, userRecord) {
+  if (typeof userName === 'string' && userName.trim()) return userName.trim();
+  if (userRecord && typeof userRecord.name === 'string' && userRecord.name.trim()) return userRecord.name.trim();
+  if (userRecord && typeof userRecord.fullName === 'string' && userRecord.fullName.trim()) return userRecord.fullName.trim();
+  return null;
+}
 
 function enrichVisitLocation(ipAddress, visitFilter) {
   void lookupIpLocation(ipAddress)
@@ -9,29 +17,55 @@ function enrichVisitLocation(ipAddress, visitFilter) {
     .catch(() => {});
 }
 
-export async function trackPageVisit(userId, visitorId, page, timeSpent, referrer, userAgent, ipAddress, visitId, landingUrl, siteOrigin) {
+export async function trackPageVisit(userId, visitorId, page, timeSpent, referrer, userAgent, ipAddress, visitId, landingUrl, siteOrigin, pagesVisited = [], userName = null) {
   try {
+    let resolvedUserName = resolveVisitorDisplayName(userName, null);
+    if (!resolvedUserName && userId) {
+      const userRecord = await User.findById(userId).select('name fullName').lean();
+      resolvedUserName = resolveVisitorDisplayName(userName, userRecord);
+    }
+
     const acquisition = classifyAcquisitionSource(referrer, landingUrl, siteOrigin);
     const safeReferrer = normalizeReferrerOrigin(referrer);
+    const now = new Date();
+    const normalizedPages = Array.isArray(pagesVisited) ? pagesVisited.slice(-30).map((item) => ({
+      page: item?.page || page,
+      timestamp: item?.timestamp ? new Date(item.timestamp) : now,
+      timeSpent: Number(item?.timeSpent || 0),
+    })) : [];
+
+    if (!normalizedPages.some((item) => item.page === page)) {
+      normalizedPages.push({ page, timestamp: now, timeSpent: Number(timeSpent) || 0 });
+    }
+
     if (visitId) {
       if (userId) {
         await PageVisit.updateMany(
           { visitorId, userId: null, timestamp: { $gte: new Date(Date.now() - 30 * 60 * 1000) } },
-          { $set: { userId } },
+          { $set: { userId, userName: resolvedUserName || undefined } },
         );
       }
 
       const update = {
-        $set: { page, referrer: safeReferrer, userAgent, ipAddress },
+        $set: {
+          page,
+          referrer: safeReferrer,
+          userAgent,
+          ipAddress,
+          lastSeenAt: now,
+          pagesVisited: normalizedPages,
+          userName: resolvedUserName || undefined,
+        },
         $max: { timeSpent: Number(timeSpent) || 0 },
         $setOnInsert: {
           visitorId,
-          timestamp: new Date(),
+          timestamp: now,
           acquisitionSource: acquisition.acquisitionSource,
           acquisitionDetail: acquisition.acquisitionDetail,
         },
       };
       if (userId) update.$set.userId = userId;
+      if (resolvedUserName) update.$set.userName = resolvedUserName;
       await PageVisit.findOneAndUpdate(
         { visitorId, visitId },
         update,
@@ -45,6 +79,9 @@ export async function trackPageVisit(userId, visitorId, page, timeSpent, referre
       userId,
       visitorId,
       page,
+      userName: resolvedUserName || null,
+      pagesVisited: normalizedPages,
+      lastSeenAt: now,
       timeSpent,
       referrer: safeReferrer,
       acquisitionSource: acquisition.acquisitionSource,
@@ -130,13 +167,23 @@ export async function getPlatformActivity(days = 30, dateRange = null) {
       { $limit: 10 },
     ]),
     PageVisit.find(match)
-      .select('page timeSpent timestamp userId referrer acquisitionSource acquisitionDetail location')
-      .sort({ timestamp: -1 })
+      .select('page timeSpent timestamp userId userName visitorId lastSeenAt pagesVisited referrer acquisitionSource acquisitionDetail location')
+      .sort({ lastSeenAt: -1, timestamp: -1 })
       .limit(100)
       .lean(),
   ]);
 
   const totals = summaryRows[0] || { totalVisits: 0, uniqueVisitors: 0, signedInVisitors: 0, totalTimeSpent: 0 };
+  const userIdsMissingNames = [...new Set(recentVisits.filter((visit) => visit.userId && !visit.userName).map((visit) => String(visit.userId)))];
+  const userNameMap = new Map();
+
+  if (userIdsMissingNames.length) {
+    const users = await User.find({ _id: { $in: userIdsMissingNames } }, { name: 1, fullName: 1 }).lean();
+    users.forEach((user) => {
+      const resolvedName = resolveVisitorDisplayName(null, user);
+      if (resolvedName) userNameMap.set(String(user._id), resolvedName);
+    });
+  }
 
   return {
     summary: {
@@ -156,11 +203,21 @@ export async function getPlatformActivity(days = 30, dateRange = null) {
       const acquisition = visit.acquisitionSource
         ? { acquisitionSource: visit.acquisitionSource, acquisitionDetail: visit.acquisitionDetail || '' }
         : classifyAcquisitionSource(visit.referrer);
+      const resolvedUserName = resolveVisitorDisplayName(visit.userName, { name: userNameMap.get(String(visit.userId)) || undefined, fullName: userNameMap.get(String(visit.userId)) || undefined });
       return {
         id: String(visit._id),
         page: visit.page,
         timeSpent: Number(visit.timeSpent || 0),
         timestamp: visit.timestamp,
+        lastSeenAt: visit.lastSeenAt || visit.timestamp,
+        pagesVisited: Array.isArray(visit.pagesVisited) ? visit.pagesVisited.slice(-10).map((pageEntry) => ({
+          page: pageEntry?.page || visit.page,
+          timestamp: pageEntry?.timestamp || visit.timestamp,
+          timeSpent: Number(pageEntry?.timeSpent || 0),
+        })) : [{ page: visit.page, timestamp: visit.timestamp, timeSpent: Number(visit.timeSpent || 0) }],
+        visitorId: visit.visitorId,
+        userName: resolvedUserName,
+        displayName: resolvedUserName || (visit.userId ? 'Signed in user' : 'Guest visitor'),
         visitorType: visit.userId ? 'SIGNED_IN' : 'GUEST',
         source: acquisition.acquisitionSource,
         sourceDetail: acquisition.acquisitionDetail,
@@ -285,15 +342,18 @@ export async function getUserAnalytics(userId, days = 30) {
 }
 
 export async function getTrafficTrend(days = 7, dateRange = null, timezone = 'UTC') {
+  const matches = getVisitDateMatch(days, dateRange);
+  const isHourlyRange = Boolean(dateRange?.startDate && dateRange?.endDate && dateRange.endDate - dateRange.startDate <= 24 * 60 * 60 * 1000);
+
   const data = await PageVisit.aggregate([
     {
-      $match: getVisitDateMatch(days, dateRange),
+      $match: matches,
     },
     {
       $group: {
-        _id: {
-          $dateToString: { format: '%Y-%m-%d', date: '$timestamp', timezone },
-        },
+        _id: isHourlyRange
+          ? { $dateToString: { format: '%Y-%m-%dT%H:00:00', date: '$timestamp', timezone } }
+          : { $dateToString: { format: '%Y-%m-%d', date: '$timestamp', timezone } },
         visits: { $sum: 1 },
         uniqueUsers: { $addToSet: '$visitorId' },
         avgTimeSpent: { $avg: '$timeSpent' },

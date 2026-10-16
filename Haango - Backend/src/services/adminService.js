@@ -340,7 +340,7 @@ export async function updateBuddy(buddyProfileId, updates) {
     throw badRequest('At least 3 profile photos are required', 'BUDDY_PHOTOS_REQUIRED');
   }
   const profileFields = [
-    'displayName', 'age', 'gender', 'about', 'summary', 'city', 'languages', 'hobbies',
+    'displayName', 'age', 'gender', 'about', 'summary', 'city', 'state', 'languages', 'hobbies',
     'hourlyRate', 'availability', 'responseTime', 'showOnFindCompanions',
     'girlsOnly', 'isAvailable', 'profileImages', 'interests', 'activities',
   ];

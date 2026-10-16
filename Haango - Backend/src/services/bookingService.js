@@ -19,6 +19,25 @@ const LOCATION_RETENTION_MS = 24 * 60 * 60 * 1000;
 const LOCATION_STALE_MS = 2 * 60 * 1000;
 const INDIA_OFFSET_MINUTES = 330;
 
+export async function getBookingPriceQuote(buddyProfileId, duration) {
+  if (!/^[a-f\d]{24}$/i.test(String(buddyProfileId || ''))) {
+    throw badRequest('A valid buddy profile ID is required', 'INVALID_BUDDY_ID');
+  }
+  if (
+    !Number.isInteger(duration)
+    || duration < env.minBookingDuration
+    || duration > env.maxBookingDuration
+  ) {
+    throw badRequest(
+      `Duration must be ${env.minBookingDuration}-${env.maxBookingDuration} hours`,
+      'INVALID_DURATION',
+    );
+  }
+  const buddy = await BuddyProfile.findById(buddyProfileId);
+  if (!buddy) throw notFound('Buddy not found');
+  return calculateBookingPrice(buddy.hourlyRate, duration);
+}
+
 function getIndiaCalendarDate(value) {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',

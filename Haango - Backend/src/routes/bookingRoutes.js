@@ -15,6 +15,7 @@ const locationLimiter = rateLimit({
 });
 
 router.post('/', requireAuth, requireBookingUser, createBookingValidator, handleValidationErrors, bookingController.createBooking);
+router.get('/quote', bookingController.getPriceQuote);
 router.get('/payu/return', bookingController.payuReturn);
 router.post('/payu/return', bookingController.payuReturn);
 router.get('/my-bookings', requireAuth, requireBookingUser, bookingController.getMyBookings);

@@ -79,6 +79,13 @@ export async function createBookingCheckout(customer, data) {
   const currentCustomer = await User.findById(customer._id).select('name email phone');
   if (!currentCustomer) throw notFound('Customer not found');
   const booking = await bookingService.createBooking(customer._id, data, { paymentPending: true });
+  const priceBreakdown = {
+    buddyFee: booking.buddyRate * booking.duration,
+    platformFee: booking.platformFee,
+    totalAmount: booking.totalAmount,
+    couponCode: booking.couponCode,
+    couponDiscount: booking.couponDiscount,
+  };
 
   if (booking.payment.amount === 0) {
     await sendConfirmationEmails(booking);
@@ -86,6 +93,8 @@ export async function createBookingCheckout(customer, data) {
       walletOnly: true,
       bookingId: booking._id,
       amount: booking.payment.walletAmount,
+      walletAmount: booking.payment.walletAmount,
+      priceBreakdown,
       currency: 'INR',
     };
   }
@@ -119,6 +128,7 @@ export async function createBookingCheckout(customer, data) {
       bookingId: booking._id,
       amount: booking.payment.amount,
       walletAmount: booking.payment.walletAmount,
+      priceBreakdown,
       currency: 'INR',
     };
   } catch (error) {

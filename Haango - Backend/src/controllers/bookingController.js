@@ -11,6 +11,18 @@ export async function createBooking(req, res, next) {
   }
 }
 
+export async function getPriceQuote(req, res, next) {
+  try {
+    const quote = await bookingService.getBookingPriceQuote(
+      req.query.buddyId,
+      Number(req.query.duration),
+    );
+    res.json(success(quote));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function payuReturn(req, res) {
   const returnFields = { ...(req.query || {}), ...(req.body || {}) };
   let result;

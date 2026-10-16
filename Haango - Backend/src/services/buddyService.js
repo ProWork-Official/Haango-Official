@@ -144,7 +144,9 @@ export async function getBuddyById(id) {
 }
 
 export async function getBuddyProfileByUserId(userId) {
-  return BuddyProfile.findOne({ userId }).populate('userId');
+  const profile = await BuddyProfile.findOne({ userId }).populate('userId');
+  if (profile && !profile.state) profile.state = 'Uttar Pradesh';
+  return profile;
 }
 
 export async function createBuddyProfile(userId, data) {
@@ -176,6 +178,7 @@ export async function createBuddyProfile(userId, data) {
     summary: data.summary || '',
     tagline: data.tagline || data.summary || '',
     city: data.city || user?.city || user?.address || '',
+    state: data.state || 'Uttar Pradesh',
     location: data.location || data.city || user?.city || user?.address || '',
     languages: normalizeStringArray(data.languages),
     hobbies: interests,
@@ -206,7 +209,7 @@ export async function createBuddyProfile(userId, data) {
 
 export async function updateBuddyProfile(userId, updates) {
   const allowedFields = [
-    'displayName', 'age', 'gender', 'about', 'summary', 'city', 'languages', 'hobbies', 'hourlyRate', 'availability', 'responseTime',
+    'displayName', 'age', 'gender', 'about', 'summary', 'city', 'state', 'languages', 'hobbies', 'hourlyRate', 'availability', 'responseTime',
     'profileImages', 'isAvailable', 'showOnFindCompanions', 'girlsOnly', 'verificationStatus',
   ];
 
@@ -263,6 +266,7 @@ export async function updateBuddyProfile(userId, updates) {
       summary: cleanUpdates.summary || '',
       tagline: cleanUpdates.tagline || cleanUpdates.summary || '',
       city: cleanUpdates.city || user?.city || user?.address || '',
+      state: cleanUpdates.state || 'Uttar Pradesh',
       location: cleanUpdates.location || cleanUpdates.city || user?.city || user?.address || '',
       languages: normalizeStringArray(cleanUpdates.languages ?? []),
       hobbies: pendingInterests,
@@ -281,6 +285,7 @@ export async function updateBuddyProfile(userId, updates) {
   }
 
   Object.assign(buddy, cleanUpdates);
+  if (!buddy.state) buddy.state = 'Uttar Pradesh';
   if (cleanUpdates.showOnFindCompanions !== undefined) {
     buddy.showOnFindCompanions = Boolean(cleanUpdates.showOnFindCompanions);
   }

@@ -50,6 +50,7 @@ export const buddyProfileValidator = [
   body('about').optional().trim().isLength({ max: 2000 }),
   body('summary').optional().trim().isLength({ max: 300 }),
   body('city').optional().trim().isLength({ max: 100 }),
+  body('state').optional().trim().isLength({ max: 100 }),
   body('hourlyRate').optional().isFloat({ min: 300, max: 400 }).withMessage('Hourly rate must be between 300 and 400'),
   body('languages').optional().isArray().withMessage('Languages must be an array'),
   body('hobbies').optional().isArray().withMessage('Hobbies must be an array'),

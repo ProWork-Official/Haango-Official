@@ -59,6 +59,7 @@ cp .env.example .env
 | `JWT_SECRET` | Secret for signing JWT tokens |
 | `JWT_EXPIRES_IN` | Token expiry (default 7d) |
 | `CLIENT_URL` | Frontend origin for CORS |
+| `CORS_ORIGINS` | Comma-separated exact origin allowlist; when set, include every frontend origin that needs API access |
 | `HAANGO_OFFICIAL_USER` | Gmail address used as the Haango campaign sender |
 | `HAANGO_OFFICIAL_PASS` | Gmail App Password for SMTP; keep it secret and out of source control |
 | `PLATFORM_FEE_PERCENTAGE` | Customer-facing Haango fee % (default 3) |

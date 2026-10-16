@@ -24,6 +24,7 @@ const buddyProfileSchema = new mongoose.Schema(
     summary: { type: String, trim: true, maxlength: 300, default: '' },
     tagline: { type: String, trim: true, maxlength: 300, default: '' },
     city: { type: String, trim: true, maxlength: 100, default: '', index: true },
+    state: { type: String, trim: true, maxlength: 100, default: 'Uttar Pradesh' },
     location: { type: String, trim: true, maxlength: 100, default: '' },
     languages: [{ type: String, trim: true }],
     hobbies: [{ type: String, trim: true }],
@@ -79,6 +80,7 @@ buddyProfileSchema.methods.toPublicObject = function toPublicObject() {
     verified: profile.verificationStatus === 'VERIFIED' || Boolean(profile.verified),
     available: profile.isAvailable !== false && profile.available !== false,
     location: profile.location || profile.city || user?.city || 'Unknown city',
+    state: profile.state || 'Uttar Pradesh',
     pricePerHour: Number(profile.hourlyRate ?? 300),
   };
 };
