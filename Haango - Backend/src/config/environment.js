@@ -45,6 +45,8 @@ export const env = {
   smtpPass: (process.env.SMTP_PASS || officialEmailPass).replace(/\s+/g, ''),
   smtpFrom: process.env.SMTP_FROM || officialEmailUser || 'no-reply@haango.local',
   smtpFromName: process.env.SMTP_FROM_NAME || 'Haango',
+  smtpConfigured: Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS),
+  hostingerSmtpFrom: process.env.SMTP_FROM || process.env.SMTP_USER || '',
   officialEmailUser,
   officialEmailPass,
   emailEnabled: Boolean(
@@ -55,6 +57,7 @@ export const env = {
   hostingerMailApiUrl: process.env.HOSTINGER_MAIL_API_URL || 'https://api.mail.hostinger.com',
   hostingerMailApiToken: process.env.HOSTINGER_MAIL_API_TOKEN || '',
   hostingerMailbox: process.env.HOSTINGER_MAILBOX || process.env.SMTP_USER || '',
+  hostingerMailboxConfigured: Boolean(process.env.HOSTINGER_MAILBOX || process.env.SMTP_USER),
 
   whatsappDefaultCountryCode: (process.env.WHATSAPP_DEFAULT_COUNTRY_CODE || '91').replace(/\D/g, ''),
 

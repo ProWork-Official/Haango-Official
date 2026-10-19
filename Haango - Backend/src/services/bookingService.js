@@ -610,13 +610,19 @@ export async function getAllBookings(filters = {}) {
   const { status, page = 1, limit = 20 } = filters;
   const query = {
     isCleared: { $ne: true },
-    'payment.status': { $nin: ['FAILED', 'ABANDONED'] },
   };
   if (status) query.bookingStatus = status;
 
   const skip = (page - 1) * limit;
   const [bookings, total] = await Promise.all([
-    Booking.find(query).sort({ date: -1 }).skip(skip).limit(limit),
+    Booking.find(query)
+      .populate('customerId', 'name email profileImage')
+      .populate('buddyId', 'name email profileImage')
+      .populate('buddyProfileId', 'displayName city')
+      .populate('activityId', 'name slug emoji')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit),
     Booking.countDocuments(query),
   ]);
 

@@ -20,15 +20,13 @@ test('normalizeRole maps frontend values to backend roles', () => {
 test('bootstrap admin seed creates a secure database-backed default admin set', () => {
   const admins = getBootstrapAdminUsers();
 
-  assert.equal(admins.length, 2);
+  assert.equal(admins.length, 1);
   assert.deepEqual(
     admins.map((admin) => admin.email),
-    [
-      'ayushjaiswal2425@gmail.com',
-      'harshikayadav2425@gmail.com',
-    ]
+    ['ayushjaiswal2425@gmail.com']
   );
-  assert.ok(admins.every((admin) => admin.role === 'ADMIN'));
+  assert.ok(admins.every((admin) => admin.role === 'MASTER_ADMIN'));
+  assert.ok(admins.every((admin) => admin.adminLevel === 3));
   assert.ok(admins.every((admin) => admin.password.length >= 8));
 });
 

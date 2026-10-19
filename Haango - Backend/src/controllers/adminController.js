@@ -233,22 +233,30 @@ export async function demoteFromAdmin(req, res, next) {
   }
 }
 
-export async function getAdminUsers(req, res, next) {
+export function getAdminUsers(req, res, next) {
+  return getAdministrators(req, res, next);
+}
+
+export async function getAdministrators(req, res, next) {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
     const skip = (page - 1) * limit;
-    const adminUsers = await User.find({ role: { $in: ['ADMIN', 'SUPER_ADMIN', 'MASTER_ADMIN'] } })
-      .sort({ adminLevel: -1, createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-    const total = await User.countDocuments({ role: { $in: ['ADMIN', 'SUPER_ADMIN', 'MASTER_ADMIN'] } });
-    res.json(paginated(adminUsers.map((u) => u.toSafeObject()), buildPagination(page, limit, total)));
+    const filter = adminService.getAdministratorsFilter(req.user?.role);
+    const [administrators, total] = await Promise.all([
+      User.find(filter)
+        .populate('adminCreatedBy', 'name email role adminLevel')
+        .sort({ adminLevel: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      User.countDocuments(filter),
+    ]);
+    res.json(paginated(administrators.map((user) => user.toSafeObject()), buildPagination(page, limit, total)));
   } catch (err) {
     next(err);
   }
-
 }
+
 
 export async function getReviews(req, res, next) {
   try {
@@ -283,6 +291,14 @@ export async function getEmailCampaignTemplates(_req, res, next) {
   }
 }
 
+export async function previewEmailCampaign(req, res, next) {
+  try {
+    res.json(success(adminEmailService.previewCampaign(req.body || {})));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function sendEmailCampaign(req, res, next) {
   try {
     res.json(success(await adminEmailService.sendCampaign(req.body || {})));
@@ -298,5 +314,3 @@ export async function getWhatsAppCampaignStatus(_req, res, next) {
     next(err);
   }
 }
-
-

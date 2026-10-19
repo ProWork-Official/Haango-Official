@@ -28,7 +28,7 @@ export async function trackPageVisit(userId, visitorId, page, timeSpent, referre
     const acquisition = classifyAcquisitionSource(referrer, landingUrl, siteOrigin);
     const safeReferrer = normalizeReferrerOrigin(referrer);
     const now = new Date();
-    const normalizedPages = Array.isArray(pagesVisited) ? pagesVisited.slice(-30).map((item) => ({
+    const normalizedPages = Array.isArray(pagesVisited) ? pagesVisited.map((item) => ({
       page: item?.page || page,
       timestamp: item?.timestamp ? new Date(item.timestamp) : now,
       timeSpent: Number(item?.timeSpent || 0),
@@ -60,10 +60,12 @@ export async function trackPageVisit(userId, visitorId, page, timeSpent, referre
         $setOnInsert: {
           visitorId,
           timestamp: now,
-          acquisitionSource: acquisition.acquisitionSource,
-          acquisitionDetail: acquisition.acquisitionDetail,
         },
       };
+      if (acquisition.acquisitionSource !== 'DIRECT') {
+        update.$set.acquisitionSource = acquisition.acquisitionSource;
+        update.$set.acquisitionDetail = acquisition.acquisitionDetail;
+      }
       if (userId) update.$set.userId = userId;
       if (resolvedUserName) update.$set.userName = resolvedUserName;
       await PageVisit.findOneAndUpdate(
@@ -98,12 +100,35 @@ export async function trackPageVisit(userId, visitorId, page, timeSpent, referre
 const legacyAcquisitionSource = {
   $switch: {
     branches: [
+      { case: { $regexMatch: { input: { $ifNull: ['$referrer', ''] }, regex: '(mail\\.google\\.com|gmail\\.com|googlemail\\.com)', options: 'i' } }, then: 'GMAIL' },
       { case: { $regexMatch: { input: { $ifNull: ['$referrer', ''] }, regex: '(whatsapp\\.com|wa\\.me)', options: 'i' } }, then: 'WHATSAPP' },
       { case: { $regexMatch: { input: { $ifNull: ['$referrer', ''] }, regex: '(facebook\\.com|instagram\\.com|linkedin\\.com|tiktok\\.com|twitter\\.com|x\\.com|youtube\\.com)', options: 'i' } }, then: 'SOCIAL' },
       { case: { $regexMatch: { input: { $ifNull: ['$referrer', ''] }, regex: 'google\\.', options: 'i' } }, then: 'GOOGLE_SEARCH' },
       { case: { $eq: [{ $ifNull: ['$referrer', ''] }, ''] }, then: 'DIRECT' },
     ],
     default: 'EXTERNAL_REFERRAL',
+  },
+};
+
+const resolvedAcquisitionSource = {
+  $switch: {
+    branches: [
+      {
+        case: {
+          $and: [
+            { $in: ['$acquisitionSource', ['EXTERNAL_REFERRAL', 'OTHER']] },
+            {
+              $or: [
+                { $regexMatch: { input: { $ifNull: ['$acquisitionDetail', ''] }, regex: '(mail\\.google\\.com|gmail\\.com|googlemail\\.com)', options: 'i' } },
+                { $regexMatch: { input: { $ifNull: ['$referrer', ''] }, regex: '(mail\\.google\\.com|gmail\\.com|googlemail\\.com)', options: 'i' } },
+              ],
+            },
+          ],
+        },
+        then: 'GMAIL',
+      },
+    ],
+    default: { $ifNull: ['$acquisitionSource', legacyAcquisitionSource] },
   },
 };
 
@@ -115,11 +140,17 @@ function getVisitDateMatch(days, dateRange) {
   return { timestamp };
 }
 
+export function countRecordedPageVisits(visits) {
+  return visits.reduce((total, visit) => (
+    total + (Array.isArray(visit.pagesVisited) && visit.pagesVisited.length ? visit.pagesVisited.length : 1)
+  ), 0);
+}
+
 export async function getPlatformActivity(days = 30, dateRange = null) {
   const match = getVisitDateMatch(days, dateRange);
   const withSource = [
     { $match: match },
-    { $addFields: { resolvedAcquisitionSource: { $ifNull: ['$acquisitionSource', legacyAcquisitionSource] } } },
+    { $addFields: { resolvedAcquisitionSource } },
   ];
 
   const [summaryRows, sourceRows, pageRows, recentVisits] = await Promise.all([
@@ -167,9 +198,8 @@ export async function getPlatformActivity(days = 30, dateRange = null) {
       { $limit: 10 },
     ]),
     PageVisit.find(match)
-      .select('page timeSpent timestamp userId userName visitorId lastSeenAt pagesVisited referrer acquisitionSource acquisitionDetail location')
+      .select('page timeSpent timestamp userId userName visitorId visitId lastSeenAt pagesVisited referrer acquisitionSource acquisitionDetail location')
       .sort({ lastSeenAt: -1, timestamp: -1 })
-      .limit(100)
       .lean(),
   ]);
 
@@ -187,7 +217,7 @@ export async function getPlatformActivity(days = 30, dateRange = null) {
 
   return {
     summary: {
-      totalVisits: totals.totalVisits,
+      totalVisits: countRecordedPageVisits(recentVisits),
       uniqueVisitors: totals.uniqueVisitors,
       signedInVisitors: totals.signedInVisitors,
       guestVisitors: Math.max(0, totals.uniqueVisitors - totals.signedInVisitors),
@@ -200,7 +230,12 @@ export async function getPlatformActivity(days = 30, dateRange = null) {
     })),
     pages: pageRows,
     recentVisits: recentVisits.map((visit) => {
-      const acquisition = visit.acquisitionSource
+      const gmailReferrer = /(mail\.google\.com|gmail\.com|googlemail\.com)/i.test(
+        `${visit.acquisitionDetail || ''} ${visit.referrer || ''}`,
+      );
+      const acquisition = gmailReferrer && ['EXTERNAL_REFERRAL', 'OTHER'].includes(visit.acquisitionSource)
+        ? { acquisitionSource: 'GMAIL', acquisitionDetail: visit.acquisitionDetail || visit.referrer }
+        : visit.acquisitionSource
         ? { acquisitionSource: visit.acquisitionSource, acquisitionDetail: visit.acquisitionDetail || '' }
         : classifyAcquisitionSource(visit.referrer);
       const resolvedUserName = resolveVisitorDisplayName(visit.userName, { name: userNameMap.get(String(visit.userId)) || undefined, fullName: userNameMap.get(String(visit.userId)) || undefined });
@@ -210,12 +245,13 @@ export async function getPlatformActivity(days = 30, dateRange = null) {
         timeSpent: Number(visit.timeSpent || 0),
         timestamp: visit.timestamp,
         lastSeenAt: visit.lastSeenAt || visit.timestamp,
-        pagesVisited: Array.isArray(visit.pagesVisited) ? visit.pagesVisited.slice(-10).map((pageEntry) => ({
+        pagesVisited: Array.isArray(visit.pagesVisited) && visit.pagesVisited.length ? visit.pagesVisited.map((pageEntry) => ({
           page: pageEntry?.page || visit.page,
           timestamp: pageEntry?.timestamp || visit.timestamp,
           timeSpent: Number(pageEntry?.timeSpent || 0),
         })) : [{ page: visit.page, timestamp: visit.timestamp, timeSpent: Number(visit.timeSpent || 0) }],
         visitorId: visit.visitorId,
+        visitId: visit.visitId,
         userName: resolvedUserName,
         displayName: resolvedUserName || (visit.userId ? 'Signed in user' : 'Guest visitor'),
         visitorType: visit.userId ? 'SIGNED_IN' : 'GUEST',

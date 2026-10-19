@@ -16,13 +16,21 @@ test('provides five editable campaign drafts with three actions and the Haango s
   for (const template of templates) {
     assert.ok(template.message.length <= 4096, `${template.id} draft exceeds WhatsApp's message limit`);
     assert.match(template.message, /Reply STOP to opt out\./);
-    assert.match(template.message, /\+91 8400732040/);
+    assert.match(template.message, /\+91-8400732040/);
     assert.match(template.message, /https:\/\/haango\.in/);
     assert.equal(template.buttons.length, 3);
     assert.equal(template.buttons.filter((button) => button.type === 'URL').length, 2);
     assert.equal(template.buttons.filter((button) => button.type === 'PHONE_NUMBER').length, 1);
     assert.ok(template.buttons.every((button) => button.text.length <= 25));
     assert.ok(template.buttons.filter((button) => button.type === 'PHONE_NUMBER').every((button) => button.phoneNumber === '918400732040'));
-    for (const button of template.buttons) assert.ok(template.message.includes(button.type === 'URL' ? button.url : '+91 8400732040'));
+    for (const button of template.buttons) {
+      if (button.type === 'URL') {
+        assert.equal(new URL(button.url).searchParams.get('utm_source'), 'whatsapp');
+        assert.ok(template.message.includes(button.url));
+      } else {
+        assert.ok(template.message.includes('+91-8400732040'));
+      }
+    }
+    assert.equal(new URL(template.message.match(/Haango website: (https?:\/\/\S+)/)[1]).searchParams.get('utm_source'), 'whatsapp');
   }
 });

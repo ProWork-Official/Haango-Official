@@ -73,14 +73,6 @@ export function getBootstrapAdminUsers() {
       role: 'MASTER_ADMIN',
       adminLevel: 3,
     },
-    {
-      name: 'Harshika Yadav',
-      email: 'harshikayadav2425@gmail.com',
-      password: 'yAdaV5242',
-      phone: '+919999999998',
-      role: 'MASTER_ADMIN',
-      adminLevel: 3,
-    },
   ];
 }
 

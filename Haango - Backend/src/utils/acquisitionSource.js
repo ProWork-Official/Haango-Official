@@ -71,6 +71,13 @@ export function classifyAcquisitionSource(referrer = '', landingUrl = '', siteOr
   const taggedMedium = String(parameters.get('utm_medium') || '').trim().toLowerCase().slice(0, 80);
   const sourceHint = `${taggedSource} ${taggedMedium}`;
 
+  if (/gmail|googlemail|mail\.google/.test(sourceHint)
+    || hostMatches(referrerHost, 'gmail.com')
+    || hostMatches(referrerHost, 'googlemail.com')
+    || hostMatches(referrerHost, 'mail.google.com')) {
+    return { acquisitionSource: 'GMAIL', acquisitionDetail: taggedSource || referrerHost };
+  }
+
   if (/whatsapp|wa\.me/.test(sourceHint) || hostMatches(referrerHost, 'whatsapp.com') || hostMatches(referrerHost, 'wa.me')) {
     return { acquisitionSource: 'WHATSAPP', acquisitionDetail: taggedSource || referrerHost };
   }

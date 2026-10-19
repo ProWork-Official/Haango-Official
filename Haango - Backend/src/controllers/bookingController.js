@@ -138,10 +138,14 @@ export async function completeBooking(req, res, next) {
 
 export async function adminGetAllBookings(req, res, next) {
   try {
+    const requestedPage = Number.parseInt(req.query.page, 10);
+    const requestedLimit = Number.parseInt(req.query.limit, 10);
     const filters = {
       status: req.query.status,
-      page: parseInt(req.query.page) || 1,
-      limit: parseInt(req.query.limit) || 20,
+      page: Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1,
+      limit: Number.isInteger(requestedLimit) && requestedLimit > 0
+        ? Math.min(requestedLimit, 100)
+        : 20,
     };
     const { bookings, total } = await bookingService.getAllBookings(filters);
     res.json(paginated(bookings, buildPagination(filters.page, filters.limit, total)));

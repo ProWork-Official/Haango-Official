@@ -4,17 +4,24 @@ import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { handleValidationErrors } from '../middleware/validate.js';
 import { adminBuddyUpdateValidator } from '../validators/index.js';
 import * as couponController from '../controllers/couponController.js';
+import * as contactSubmissionController from '../controllers/contactSubmissionController.js';
+import { query } from 'express-validator';
 
 const router = Router();
 
 router.use(requireAuth, requireAdmin);
 
+router.get('/contact-submissions', [
+  query('page').optional().isInt({ min: 1, max: Number.MAX_SAFE_INTEGER }).withMessage('Page must be a positive integer.'),
+  query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100.'),
+], handleValidationErrors, contactSubmissionController.adminListContactSubmissions);
 router.get('/dashboard', adminController.getDashboard);
 router.get('/user-stats', adminController.getUserStats);
 router.get('/users', adminController.getUsers);
 router.get('/users/:id/summary', adminController.getUserAdminSummary);
 router.get('/users/:id/referrals', adminController.getUserReferrals);
 router.get('/admin-users', adminController.getAdminUsers);
+router.get('/administrators', adminController.getAdministrators);
 router.get('/buddies/stats', adminController.getBuddyStats);
 router.get('/buddies', adminController.getBuddies);
 router.get('/buddies/:id/wallet', adminController.getBuddyWallet);
@@ -39,6 +46,7 @@ router.delete('/reviews/:id', adminController.deleteReview);
 router.get('/cancellation-requests', adminController.getCancellationRequests);
 router.patch('/cancellation-requests/:id', adminController.reviewCancellation);
 router.get('/email-campaigns/templates', adminController.getEmailCampaignTemplates);
+router.post('/email-campaigns/preview', adminController.previewEmailCampaign);
 router.post('/email-campaigns/send', adminController.sendEmailCampaign);
 router.get('/whatsapp-campaigns/status', adminController.getWhatsAppCampaignStatus);
 router.get('/coupons', couponController.list);

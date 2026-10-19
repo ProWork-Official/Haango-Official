@@ -76,6 +76,8 @@ cp .env.example .env
 
 For Gmail campaign email, set `HAANGO_OFFICIAL_USER` and `HAANGO_OFFICIAL_PASS` in the backend `.env`. The mailer defaults to `smtp.gmail.com` on port `465` when these are present. Rotate any app password that has been shared, and use the replacement only in the local/deployed environment.
 
+Admin bulk email campaigns check submitted addresses against the user database before delivery. Addresses already associated with any Haango account are skipped, and the campaign result lists the skipped addresses; only addresses not found in the user database are sent.
+
 ## WhatsApp Marketing Campaigns
 
 Admin → WhatsApp campaigns provides five editable message drafts and supports up to five manually entered phone numbers. Each contact gets an individual `wa.me` link with the current draft prefilled. The admin opens each contact separately in WhatsApp Business, reviews the message, and taps Send. No Meta Cloud API access token, template approval, or webhook is required.
@@ -158,7 +160,7 @@ Creates demo data: 8 activities, 10 customers, 6 buddies, 5 bookings, 5 reviews,
 | PATCH | `/api/bookings/:id/reject` | BUDDY | Reject booking |
 | PATCH | `/api/bookings/:id/start` | BUDDY | Start booking |
 | PATCH | `/api/bookings/:id/complete` | BUDDY | Complete booking |
-| GET | `/api/bookings/admin/all` | ADMIN | All bookings |
+| GET | `/api/bookings/admin/all?page=1&limit=20&status=CONFIRMED` | ADMIN | Paginated admin booking list, including customer, buddy, activity, pricing and payment details. Omitting `status` includes all non-cleared bookings, including failed or abandoned payments. |
 
 ### Reviews
 | Method | Path | Auth | Description |
@@ -191,11 +193,14 @@ Creates demo data: 8 activities, 10 customers, 6 buddies, 5 bookings, 5 reviews,
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | GET | `/api/admin/dashboard` | ADMIN | Platform stats |
+| GET | `/api/admin/administrators?page=1&limit=20` | MASTER_ADMIN | Paginated ADMIN and SUPER_ADMIN accounts, including creator attribution where recorded |
 | GET | `/api/admin/users` | ADMIN | All users |
 | GET | `/api/admin/buddies` | ADMIN | All buddy profiles |
 | PATCH | `/api/admin/buddies/:id/verify` | ADMIN | Verify buddy |
 | PATCH | `/api/admin/buddies/:id/suspend` | ADMIN | Suspend buddy |
 | PATCH | `/api/admin/users/:id/suspend` | ADMIN | Suspend user |
+
+The dashboard `totalUsers` count excludes `MASTER_ADMIN` accounts (and the retired master-admin account), but continues to include `ADMIN` and `SUPER_ADMIN`. The default user-management list and activity summary remain scoped to `CUSTOMER` and `BUDDY`; the optional admin-inclusive list includes `ADMIN` and `SUPER_ADMIN` but never `MASTER_ADMIN`. New admin promotions record the promoting account in `adminCreatedBy`; existing accounts without that field are shown as legacy accounts with no recorded attribution.
 
 ### Companion Wallet and Withdrawals
 | Method | Path | Auth | Description |

@@ -696,6 +696,51 @@ Haango
 
 const adminCampaignTemplates = [
   {
+  id: 'customer_signup',
+  title: 'Welcome bonus & signup options',
+  category: 'Non customer',
+  recipientRole: 'CUSTOMER',
+  deliveryMode: 'broadcast',
+  subject: 'Start planning with Haango & claim your welcome bonuses',
+  angle: 'Highlight wallet bonus for new users and additional rewards for becoming a Haango Buddy.',
+  ctaLabel: 'Sign Up Now',
+  ctaPath: 'https://haango.in/signup',
+},
+{
+  id: 'find_your_buddy',
+  title: 'Find Your Perfect Buddy on Haango',
+  category: 'Non customer',
+  recipientRole: 'CUSTOMER',
+  deliveryMode: 'broadcast',
+  subject: 'Still asking friends to join your plans? Find your perfect Buddy on Haango!',
+  angle: 'Encourage users to stop waiting for friends and find like-minded Buddies to join their plans, with an instant ₹100 welcome bonus.',
+  ctaLabel: 'Find Your Buddy',
+  ctaPath: 'https://haango.in/signup',
+},
+{
+  id: 'customer_wallet_credit',
+  title: 'Your Wallet Credit Is Here!',
+  category: 'Registered customers',
+  recipientRole: 'CUSTOMER',
+  deliveryMode: 'broadcast',
+  subject: '🎉 Congratulations! We’ve added credit to your Haango wallet',
+  angle: 'Celebrate wallet credit added for existing users and encourage them to explore Haango, find their perfect Buddy, and book their next plan.',
+  ctaLabel: 'Explore & Book Your Buddy',
+  ctaPath: 'https://haango.in/dashboard',
+  variables: ['creditAmount'],
+},
+{
+  id: 'customer_complete_profile',
+  title: 'Complete Your Profile & Get ₹25',
+  category: 'Registered customers',
+  recipientRole: 'CUSTOMER',
+  deliveryMode: 'broadcast',
+  subject: 'Complete your Haango profile & earn ₹25 wallet credit!',
+  angle: 'Encourage signed-in users to complete their profiles before booking a Buddy and reward them with ₹25 credited to their Haango wallet.',
+  ctaLabel: 'Complete Your Profile',
+  ctaPath: 'https://haango.in/dashboard',
+},
+  {
     id: 'customer_safety',
     title: 'Safety & privacy feature highlight',
     category: 'All customers',
@@ -704,7 +749,7 @@ const adminCampaignTemplates = [
     subject: 'Your safety is built into every Haango plan',
     angle: 'Explain private in-app chat and OTP check-in/check-out.',
     ctaLabel: 'Read our Safety Guide',
-    ctaPath: '/safety',
+    ctaPath: 'https://haango.in/safety',
   },
   {
     id: 'customer_promo',
@@ -715,7 +760,7 @@ const adminCampaignTemplates = [
     subject: 'A little credit for your next Haango plan',
     angle: 'Share a time-bound promo code for an activity booking.',
     ctaLabel: 'Claim your ₹100 credit',
-    ctaPath: '/explore',
+    ctaPath: 'https://haango.in/explore',
     variables: ['promoCode', 'promoExpiry'],
   },
   {
@@ -727,7 +772,7 @@ const adminCampaignTemplates = [
     subject: 'Make plans around activities, not expectations',
     angle: 'Clarify that Haango is activity-first, not a dating app or a long-term commitment.',
     ctaLabel: 'Explore activities',
-    ctaPath: '/explore',
+    ctaPath: 'https://haango.in/explore',
   },
   {
     id: 'buddy_booking_tips',
@@ -738,7 +783,7 @@ const adminCampaignTemplates = [
     subject: 'Small profile improvements can bring more bookings',
     angle: 'Actionable advice for profile photos, bios, and quick chat replies.',
     ctaLabel: 'Update your profile',
-    ctaPath: '/buddy-dashboard',
+    ctaPath: 'https://haango.in/buddy-dashboard',
   },
   {
     id: 'buddy_referral_bonus',
@@ -749,8 +794,19 @@ const adminCampaignTemplates = [
     subject: 'Invite a buddy and earn a referral bonus',
     angle: 'Invite verified friends with the BUDDYBONUS75 referral offer.',
     ctaLabel: 'Share your referral link',
-    ctaPath: '/signup',
+    ctaPath: 'https://haango.in/signup',
   },
+  {
+  id: 'buddy_complete_profile',
+  title: 'Complete Your Buddy Profile & Earn ₹50',
+  category: 'Registered Buddies',
+  recipientRole: 'BUDDY',
+  deliveryMode: 'broadcast',
+  subject: 'Get discovered on Haango & earn ₹50 in your Buddy wallet!',
+  angle: 'Encourage registered Buddies to complete their profiles so customers can discover them on the Explore page, with an instant ₹50 Buddy wallet reward.',
+  ctaLabel: 'Complete Your Profile',
+  ctaPath: 'https://haango.in/buddy-dashboard',
+},
   {
     id: 'customer_abandoned_booking',
     title: 'Incomplete booking reminder',
@@ -760,7 +816,7 @@ const adminCampaignTemplates = [
     subject: 'Did something interrupt your plan? Your companion is waiting!',
     angle: 'Send to customers with a pending payment booking created 30 minutes to 7 days ago.',
     ctaLabel: 'Continue exploring',
-    ctaPath: '/explore',
+    ctaPath: 'https://haango.in/explore',
     trigger: 'abandoned_booking',
   },
   {
@@ -772,7 +828,7 @@ const adminCampaignTemplates = [
     subject: "We miss you! Here's a discount on your next café run.",
     angle: 'Send to active customer accounts whose last-seen date is at least 14 days ago.',
     ctaLabel: 'Find your next plan',
-    ctaPath: '/explore',
+    ctaPath: 'https://haango.in/explore',
     trigger: 'inactive_14_days',
     variables: ['promoCode', 'promoExpiry'],
   },
@@ -785,7 +841,7 @@ const adminCampaignTemplates = [
     subject: "You're 1 step away from accepting paid bookings on Haango!",
     angle: 'Send to buddies without a profile, with an incomplete profile, or with pending verification.',
     ctaLabel: 'Complete your profile',
-    ctaPath: '/buddy-dashboard',
+    ctaPath: 'https://haango.in/buddy-dashboard',
     trigger: 'buddy_profile_incomplete',
   },
   {
@@ -797,7 +853,7 @@ const adminCampaignTemplates = [
     subject: 'Your booking milestone on Haango',
     angle: 'Celebrate buddies at 5, 10, or 18 completed bookings.',
     ctaLabel: 'View your buddy dashboard',
-    ctaPath: '/buddy-dashboard',
+    ctaPath: 'https://haango.in/buddy-dashboard',
     trigger: 'buddy_milestone',
     variables: ['milestone'],
   },
@@ -812,10 +868,44 @@ export function getAdminCampaignTemplates() {
 function getCampaignCopy(templateId, recipientName, variables) {
   const greeting = `Hello ${recipientName || 'there'},`;
   const promoCode = String(variables.promoCode || 'WELCOME100').trim();
+  const creditAmount = String(variables.creditAmount ?? 100).trim() || '100';
   const referralCode = String(variables.referralCode || '').trim();
   const milestone = [5, 10, 18].includes(Number(variables.milestone)) ? Number(variables.milestone) : 10;
 
   const copy = {
+    customer_signup: {
+  title: 'Get rewarded when you join Haango',
+  paragraphs: [
+    'Use coupon code WELCOME100 during signup to get ₹100 credited directly to your Haango wallet.',
+    'Want to become a Buddy? Use coupon code BUDDYBONUS75 to get an extra ₹75 credited to your Buddy wallet.'
+  ],
+  callout: `User Coupons: WELCOME100`,
+  calloutx: `Buddy Coupon: BUDDYBONUS75`,
+},
+find_your_buddy: {
+  title: 'Your Perfect Buddy Is Just a Sign-Up Away!',
+  paragraphs: [
+    'Still asking your friends to join your plans? Forget the wait! 🎉 Find the perfect Buddy on Haango who shares your interests and is ready to join your next adventure.',
+    'Sign up on Haango today and use coupon code WELCOME100 to get ₹100 credited instantly to your Haango wallet. Your next plan deserves the right Buddy!'
+  ],
+  callout: `User Coupon: WELCOME100`,
+},
+customer_wallet_credit: {
+  title: '🎉 Great News! Your Wallet Just Got Better',
+  paragraphs: [
+    `Hey there! Congratulations! 🥳 We’ve added ₹${creditAmount} to your Haango wallet. Your next adventure just got a little more exciting!`,
+    'What are you waiting for? Head over to Haango, find the perfect Buddy who shares your interests, and book your Buddy for your next plan. Whether it’s exploring a new place or trying something fun, your next experience starts here!'
+  ],
+  callout: `Wallet Credit Added: ₹${creditAmount}`,
+},
+customer_complete_profile: {
+  title: 'Complete Your Profile & Get ₹25 in Your Wallet! 🎉',
+  paragraphs: [
+    'Hey there! 👋 Ready to find your perfect Buddy on Haango? Before you book your next plan, take a moment to complete your profile and help other users get to know you better.',
+    'Here’s a little reward for you! 🎁 Complete your Haango profile and get ₹25 credited to your wallet. Finish setting up your profile today, claim your reward, and get ready to make your next plan more exciting with the perfect Buddy!'
+  ],
+  callout: `Complete your profile and earn ₹25 wallet credit!`,
+},
     customer_safety: {
       title: 'Good plans feel safer',
       paragraphs: ['Keep conversations in Haango chat so you do not need to share your phone number.', 'Use the OTP check-in and check-out steps to confirm the start and end of your activity.'],
@@ -838,6 +928,14 @@ function getCampaignCopy(templateId, recipientName, variables) {
       paragraphs: ['Invite friends who would make thoughtful, reliable buddies. Once they complete verification, eligible referrals can earn the BUDDYBONUS75 wallet bonus. Terms apply.', 'Share your signup link and referral code with friends who are a good fit for the Haango community.'],
       callout: referralCode ? `Your referral code: ${referralCode}` : 'Referral offer: BUDDYBONUS75',
     },
+    buddy_complete_profile: {
+  title: 'Get Discovered on Haango & Earn ₹50! 🎉',
+  paragraphs: [
+    'Hey Buddy! 👋 Want more users to discover you on Haango? Complete your Buddy profile so other users can see you on the Explore page and find you when looking for someone who shares their interests.',
+    'Here’s your reward! 🎁 Complete your Buddy profile and get ₹50 credited instantly to your Buddy wallet. Don’t miss out on this opportunity to boost your visibility and get ready for more exciting plans!'
+  ],
+  callout: `Complete your Buddy profile & get ₹50 instantly!`,
+},
     customer_abandoned_booking: {
       title: 'Your plan is still waiting',
       paragraphs: ['Did something interrupt your booking? The activity you started looking at is still a great way to spend time together.', 'Pick up where you left off and check availability before your preferred time is gone.'],
@@ -861,14 +959,7 @@ function getCampaignCopy(templateId, recipientName, variables) {
   return { greeting, ...copy };
 }
 
-export async function sendAdminCampaignEmail({ templateId, recipient, recipientName, variables = {} }) {
-  if (!env.officialEmailUser || !env.officialEmailPass) {
-    const error = new Error('Campaign email is not configured. Set HAANGO_OFFICIAL_USER and HAANGO_OFFICIAL_PASS in the backend environment.');
-    error.statusCode = 503;
-    error.isOperational = true;
-    throw error;
-  }
-
+function buildAdminCampaignEmail({ templateId, recipientName, variables = {} }) {
   const template = adminCampaignTemplates.find((item) => item.id === templateId);
   if (!template) {
     const error = new Error('Select a valid email template.');
@@ -884,12 +975,15 @@ export async function sendAdminCampaignEmail({ templateId, recipient, recipientN
   const referralPath = templateId === 'buddy_referral_bonus' && variables.referralCode
     ? `/signup?signupCode=${encodeURIComponent(variables.referralCode)}`
     : template.ctaPath;
-  const ctaUrl = new URL(referralPath, `${emailClientOrigin}/`).toString();
+  const ctaUrlObject = new URL(referralPath, `${emailClientOrigin}/`);
+  ctaUrlObject.searchParams.set('utm_source', 'gmail');
+  const ctaUrl = ctaUrlObject.toString();
   const safe = {
     greeting: escapeHtml(copy.greeting),
     title: escapeHtml(copy.title),
     paragraphs: copy.paragraphs.map(escapeHtml),
     callout: copy.callout ? escapeHtml(copy.callout) : '',
+    calloutx: copy.calloutx ? escapeHtml(copy.calloutx) : '',
     ctaLabel: escapeHtml(template.ctaLabel),
     ctaUrl: escapeHtml(ctaUrl),
   };
@@ -898,6 +992,7 @@ export async function sendAdminCampaignEmail({ templateId, recipient, recipientN
     '',
     ...safe.paragraphs,
     safe.callout ? `\n${safe.callout}` : '',
+    safe.calloutx ? `\n${safe.calloutx}` : '',
     `\n${template.ctaLabel}: ${ctaUrl}`,
     '',
     'Haango',
@@ -911,6 +1006,7 @@ export async function sendAdminCampaignEmail({ templateId, recipient, recipientN
           <h1 style="margin:0 0 16px;color:#102038;font-size:25px;line-height:1.3">${safe.title}</h1>
           ${safe.paragraphs.map((paragraph) => `<p style="margin:0 0 14px;color:#475467;font-size:15px;line-height:1.7">${paragraph}</p>`).join('')}
           ${safe.callout ? `<div style="margin:22px 0;padding:16px;border:1px solid #ffe1cc;border-radius:12px;background:#fff5ed;text-align:center;color:#c84c13;font-size:18px;font-weight:700">${safe.callout}</div>` : ''}
+          ${safe.calloutx ? `<div style="margin:22px 0;padding:16px;border:1px solid #ffe1cc;border-radius:12px;background:#fff5ed;text-align:center;color:#c84c13;font-size:18px;font-weight:700">${safe.calloutx}</div>` : ''}
           <p style="margin:26px 0 0;text-align:center"><a href="${safe.ctaUrl}" style="display:inline-block;padding:13px 22px;border-radius:8px;background:#ff7418;color:#fff;text-decoration:none;font-weight:700">${safe.ctaLabel}</a></p>
         </div>
         <div style="padding:18px 24px;background:#fafbfc;border-top:1px solid #edf0f4;text-align:center"><p style="margin:0;color:#98a2b3;font-size:11px;line-height:1.6">© ${new Date().getFullYear()} Haango. All rights reserved.</p></div>
@@ -918,7 +1014,114 @@ export async function sendAdminCampaignEmail({ templateId, recipient, recipientN
     </div>
   `;
 
-  await sendEmail({ to: recipient, subject, text, html, useOfficialSender: true });
-  return { subject };
+  return { subject, text, html };
 }
 
+export function previewAdminCampaignEmail({ templateId, promoCode, milestone, referralCode, creditAmount }) {
+  const email = buildAdminCampaignEmail({
+    templateId,
+    recipientName: 'there',
+    variables: { promoCode, milestone, referralCode, creditAmount },
+  });
+  const logo = fs.readFileSync(logoPath).toString('base64');
+
+  return {
+    ...email,
+    html: email.html.replace('src="cid:haango-logo"', `src="data:image/png;base64,${logo}"`),
+  };
+}
+
+export function isAdminCampaignSenderConfigured(senderProvider, configuration = env) {
+  if (senderProvider === 'GMAIL') {
+    return Boolean(configuration.officialEmailUser && configuration.officialEmailPass);
+  }
+  if (senderProvider === 'HOSTINGER') {
+    const apiConfigured = Boolean(
+      configuration.hostingerMailApiToken
+      && configuration.hostingerMailApiToken !== 'PASTE_HOSTINGER_MAIL_API_TOKEN_HERE'
+      && configuration.hostingerMailbox
+      && configuration.hostingerMailboxConfigured,
+    );
+    const smtpConfigured = Boolean(
+      configuration.smtpConfigured
+      && configuration.smtpHost
+      && configuration.smtpHost.toLowerCase() !== 'smtp.gmail.com'
+      && configuration.smtpUser
+      && configuration.smtpPass
+      && configuration.hostingerSmtpFrom,
+    );
+    return apiConfigured || smtpConfigured;
+  }
+  return false;
+}
+
+function getAdminCampaignSenderConfigurationError(senderProvider) {
+  const error = new Error(senderProvider === 'HOSTINGER'
+    ? 'Hostinger email is not configured. Configure the Hostinger Mail API or Hostinger SMTP settings in the backend environment.'
+    : 'Gmail campaign email is not configured. Configure HAANGO_OFFICIAL_USER and HAANGO_OFFICIAL_PASS in the backend environment.');
+  error.statusCode = 503;
+  error.errorCode = `${senderProvider}_EMAIL_NOT_CONFIGURED`;
+  error.isOperational = true;
+  return error;
+}
+
+async function sendWithHostingerSmtp({ to, subject, text, html }) {
+  const transporter = createTransporter();
+  await transporter.sendMail({
+    from: `${env.smtpFromName} <${env.hostingerSmtpFrom}>`,
+    to,
+    subject,
+    text,
+    html,
+    attachments: [{ filename: 'haango-logo.png', path: logoPath, cid: 'haango-logo' }],
+  });
+}
+
+export async function sendAdminCampaignEmail({
+  templateId,
+  recipient,
+  recipientName,
+  variables = {},
+  senderProvider = 'GMAIL',
+}) {
+  if (!['GMAIL', 'HOSTINGER'].includes(senderProvider)) {
+    const error = new Error('Choose Hostinger or Gmail as the bulk email sender.');
+    error.statusCode = 400;
+    error.isOperational = true;
+    throw error;
+  }
+  if (!isAdminCampaignSenderConfigured(senderProvider)) {
+    throw getAdminCampaignSenderConfigurationError(senderProvider);
+  }
+
+  const { subject, text, html } = buildAdminCampaignEmail({ templateId, recipientName, variables });
+  if (senderProvider === 'HOSTINGER') {
+    const apiConfigured = Boolean(
+      env.hostingerMailApiToken
+      && env.hostingerMailApiToken !== 'PASTE_HOSTINGER_MAIL_API_TOKEN_HERE'
+      && env.hostingerMailbox
+      && env.hostingerMailboxConfigured,
+    );
+    if (apiConfigured) {
+      const logo = fs.readFileSync(logoPath).toString('base64');
+      await sendWithHostingerMailApi({
+        to: recipient,
+        subject,
+        text,
+        html,
+        attachments: [{
+          filename: 'haango-logo.png',
+          content: logo,
+          contentType: 'image/png',
+          cid: 'haango-logo',
+        }],
+      });
+    } else {
+      await sendWithHostingerSmtp({ to: recipient, subject, text, html });
+    }
+    return { subject, senderProvider };
+  }
+
+  await sendEmail({ to: recipient, subject, text, html, useOfficialSender: true });
+  return { subject, senderProvider };
+}

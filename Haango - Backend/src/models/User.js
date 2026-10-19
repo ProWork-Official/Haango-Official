@@ -56,6 +56,7 @@ const userSchema = new mongoose.Schema(
     lastSeenAt: { type: Date, default: null, index: true },
     requiresOtpReauth: { type: Boolean, default: false, index: true },
     adminLevel: { type: Number, default: 0, enum: [0, 1, 2, 3] },
+    adminCreatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   },
   { timestamps: true }
 );

@@ -1,25 +1,31 @@
 const callButton = (text) => ({ type: 'PHONE_NUMBER', text, phoneNumber: '918400732040' });
+const addWhatsAppSource = (url) => {
+  const taggedUrl = new URL(url);
+  taggedUrl.searchParams.set('utm_source', 'whatsapp');
+  return taggedUrl.toString();
+};
+
 const appendActionText = (message, buttons) => {
   const optOutText = '\n\nReply STOP to opt out.';
   const body = message.endsWith(optOutText) ? message.slice(0, -optOutText.length) : message;
   const actions = buttons.map((button) => (
     button.type === 'URL'
-      ? `${button.text}: ${button.url}`
-      : `${button.text}: +91 8400732040`
+      ? `${button.text}: ${addWhatsAppSource(button.url)}`
+      : `${button.text}: +91-8400732040`
   )).join('\n');
-  return `${body}\n\nHaango website: https://haango.in\n${actions}${optOutText}`;
+  return `${body}\n\nHaango website: ${addWhatsAppSource('https://haango.in')}\n${actions}${optOutText}`;
 };
 
 const templates = [
   {
     id: 'haango_welcome_offer',
     name: 'haango_welcome_offer',
-    title: 'New user and activity booking',
+    title: 'New user welcome & referral offer',
     category: 'Customer offer',
-    message: `Tired of canceled plans or going out alone?\n\nThis is the perfect time to try *Haango*!\n\n🎁 Get *₹100 Free Booking Credit* added to your account instantly!\n\n🧑‍🎓 Special Offers for college students & young professionals in Prayagraj.\n\nAnd you can choose your benefit 👇\n\n💳 *Flat ₹100 OFF* on your first Movie or Café Outing (Use Code: *SAVE100*)\n\nOR\n\n💰 *₹100 Instant Credit* applied directly on registration (Use Code: *WELCOME100*)\n\n➕ *100% Safe* with In-App Private Chat & OTP Check-in Verification\n\n📞 Call Us +91 8400732040\n\nFind Company. Save. Make Memories!\n\nLimited-period launch offer. T&C apply.\n\nReply STOP to opt out.`,
+    message: `Tired of canceled plans or going out alone?\nThis is the perfect time to try Haango!\n\n1.) (Use Code: WELCOME100) while signing up & Get Free ₹100 Credit in your wallet instantly!\n2.) (Use Code: SAVE100) to get Flat ₹100 OFF on your first booking on Haango.\n\nHaango is 100% Safe with In-App Chat & OTP Check-in Verification\n\nLimited-period launch offer. T&C apply.\n\nReply STOP to opt out.`,
     buttons: [
-      { type: 'URL', text: 'Book Activity', url: 'https://bit.ly/HaangoBook' },
-      { type: 'URL', text: 'Browse Companions', url: 'https://bit.ly/HaangoApp' },
+      { type: 'URL', text: 'Sign Up Now', url: 'https://haango.in/signup' },
+      { type: 'URL', text: 'Browse Companions', url: 'https://haango.in/explore' },
       callButton('Call Support'),
     ],
   },
@@ -80,7 +86,10 @@ export function getWhatsAppCampaignTemplates() {
     title,
     category,
     message: appendActionText(message, buttons),
-    buttons: buttons.map((button) => ({ ...button })),
+    buttons: buttons.map((button) => ({
+      ...button,
+      ...(button.type === 'URL' ? { url: addWhatsAppSource(button.url) } : {}),
+    })),
   }));
 }
 

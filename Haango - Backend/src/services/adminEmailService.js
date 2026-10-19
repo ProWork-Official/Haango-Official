@@ -1,8 +1,13 @@
 import Booking from '../models/Booking.js';
 import BuddyProfile from '../models/BuddyProfile.js';
 import User from '../models/User.js';
-import { env } from '../config/environment.js';
-import { getAdminCampaignTemplates, sendAdminCampaignEmail } from './emailService.js';
+import {
+  getAdminCampaignTemplates,
+  isAdminCampaignSenderConfigured,
+  previewAdminCampaignEmail,
+  sendAdminCampaignEmail,
+} from './emailService.js';
+import { parseBulkEmailRecipients } from '../utils/emailRecipientList.js';
 
 const allowedMilestones = new Set([5, 10, 18]);
 
@@ -17,6 +22,11 @@ function getTemplate(templateId) {
   const template = getAdminCampaignTemplates().find((item) => item.id === templateId);
   if (!template) throw requestError('Select a valid email template.');
   return template;
+}
+
+export function previewCampaign({ templateId, promoCode, milestone, creditAmount }) {
+  getTemplate(templateId);
+  return previewAdminCampaignEmail({ templateId, promoCode, milestone, creditAmount });
 }
 
 async function getTriggeredRecipients(template, milestone) {
@@ -71,7 +81,7 @@ async function getTriggeredRecipients(template, milestone) {
   return [];
 }
 
-async function getRecipients(template, recipientMode, email, milestone) {
+export async function resolveCampaignRecipients(template, recipientMode, email, milestone, bulkEmails) {
   if (recipientMode === 'SINGLE') {
     const normalizedEmail = String(email || '').trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
@@ -81,6 +91,10 @@ async function getRecipients(template, recipientMode, email, milestone) {
       .select('name email role referralCode')
       .lean();
     return [account || { email: normalizedEmail, name: '' }];
+  }
+
+  if (recipientMode === 'BULK') {
+    return bulkEmails.map((recipientEmail) => ({ email: recipientEmail, name: '' }));
   }
 
   if (template.deliveryMode === 'broadcast' && recipientMode === 'ALL') {
@@ -96,10 +110,77 @@ async function getRecipients(template, recipientMode, email, milestone) {
   throw requestError('Choose a recipient option available for this topic.');
 }
 
-export async function sendCampaign({ templateId, recipientMode, email, promoCode, promoExpiry, milestone }) {
+export async function sendCampaignToRecipients({
+  recipients,
+  templateId,
+  promoCode,
+  promoExpiry,
+  milestone,
+  creditAmount,
+  sender = sendAdminCampaignEmail,
+}) {
+  const uniqueRecipients = [...new Map(recipients
+    .filter((recipient) => recipient?.email)
+    .map((recipient) => [recipient.email.toLowerCase(), recipient])).values()];
+
+  let sent = 0;
+  let failed = 0;
+  for (const recipient of uniqueRecipients) {
+    try {
+      await sender({
+        templateId,
+        recipient: recipient.email,
+        recipientName: recipient.name,
+        variables: {
+          promoCode: String(promoCode || 'WELCOME100').trim().toUpperCase(),
+          promoExpiry,
+          milestone: Number(milestone),
+          creditAmount,
+          referralCode: recipient.referralCode,
+        },
+      });
+      sent += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+
+  return { recipientCount: uniqueRecipients.length, sent, failed };
+}
+
+export async function sendCampaign({
+  templateId,
+  recipientMode,
+  email,
+  recipientEmails,
+  promoCode,
+  promoExpiry,
+  milestone,
+  creditAmount,
+  senderProvider,
+  sender = sendAdminCampaignEmail,
+}) {
   const template = getTemplate(templateId);
-  if (!env.officialEmailUser || !env.officialEmailPass) {
-    throw requestError('Campaign email is not configured. Add HAANGO_OFFICIAL_USER and HAANGO_OFFICIAL_PASS to the backend environment.', 503);
+  let bulkEmails = null;
+  let selectedSenderProvider;
+  if (recipientMode === 'BULK') {
+    selectedSenderProvider = String(senderProvider || 'GMAIL').trim().toUpperCase();
+    if (!['HOSTINGER', 'GMAIL'].includes(selectedSenderProvider)) {
+      throw requestError('Choose Hostinger or Gmail as the bulk email sender.');
+    }
+    try {
+      bulkEmails = parseBulkEmailRecipients(recipientEmails);
+    } catch (error) {
+      throw requestError(error.message);
+    }
+  } else {
+    selectedSenderProvider = 'GMAIL';
+  }
+  if (sender === sendAdminCampaignEmail && !isAdminCampaignSenderConfigured(selectedSenderProvider)) {
+    const message = selectedSenderProvider === 'HOSTINGER'
+      ? 'Hostinger email is not configured. Configure the Hostinger Mail API or Hostinger SMTP settings in the backend environment.'
+      : 'Gmail campaign email is not configured. Configure HAANGO_OFFICIAL_USER and HAANGO_OFFICIAL_PASS in the backend environment.';
+    throw requestError(message, 503);
   }
   if (template.variables?.includes('promoExpiry')) {
     const normalizedExpiry = String(promoExpiry || '');
@@ -111,31 +192,33 @@ export async function sendCampaign({ templateId, recipientMode, email, promoCode
     }
   }
 
-  const recipients = await getRecipients(template, recipientMode, email, milestone);
-  const uniqueRecipients = [...new Map(recipients
-    .filter((recipient) => recipient?.email)
-    .map((recipient) => [recipient.email.toLowerCase(), recipient])).values()];
-
-  let sent = 0;
-  let failed = 0;
-  for (const recipient of uniqueRecipients) {
-    try {
-      await sendAdminCampaignEmail({
-        templateId,
-        recipient: recipient.email,
-        recipientName: recipient.name,
-        variables: {
-          promoCode: String(promoCode || 'WELCOME100').trim().toUpperCase(),
-          promoExpiry,
-          milestone: Number(milestone),
-          referralCode: recipient.referralCode,
-        },
-      });
-      sent += 1;
-    } catch {
-      failed += 1;
-    }
+  const recipients = await resolveCampaignRecipients(template, recipientMode, email, milestone, bulkEmails);
+  let skippedEmails = [];
+  let deliveryRecipients = recipients;
+  if (recipientMode === 'BULK') {
+    const existingUsers = await User.find({ email: { $in: bulkEmails } })
+      .select('email')
+      .lean();
+    const existingEmails = new Set(existingUsers
+      .map((user) => String(user.email || '').trim().toLowerCase())
+      .filter(Boolean));
+    skippedEmails = bulkEmails.filter((recipientEmail) => existingEmails.has(recipientEmail));
+    deliveryRecipients = recipients.filter((recipient) => !existingEmails.has(
+      String(recipient.email || '').trim().toLowerCase(),
+    ));
   }
 
-  return { recipientCount: uniqueRecipients.length, sent, failed };
+  const result = await sendCampaignToRecipients({
+    recipients: deliveryRecipients,
+    templateId,
+    promoCode,
+    promoExpiry,
+    milestone,
+    creditAmount,
+    sender: (message) => sender({
+      ...message,
+      senderProvider: recipientMode === 'BULK' ? selectedSenderProvider : undefined,
+    }),
+  });
+  return { ...result, skippedEmails, senderProvider: selectedSenderProvider };
 }
