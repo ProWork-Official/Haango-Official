@@ -12,6 +12,7 @@ import MessagesPage from './Pages/MessagesPage';
 import DashboardPage from './Pages/DashboardPage';
 import ReferralsPage from './Pages/ReferralsPage';
 import AdminPage from './Pages/AdminPage';
+import AdminContactNumbersPage from './Pages/AdminContactNumbersPage';
 import FAQSection from './Components/FAQ';
 import AuthPage from './Pages/AuthPage';
 import ExperiencePage from './Pages/ExperiencePage';
@@ -25,6 +26,8 @@ import BuddyBookingsPage from './Pages/BuddyBookingsPage';
 import { AuthProvider, useAuth } from './lib/auth';
 import { apiRequest } from './lib/api';
 import { registerPushSubscription, requestBrowserNotificationPermission, triggerBrowserNotification } from './lib/browserNotifications';
+import { shouldTrackPageVisit } from './lib/pageVisitTracking';
+import HomeContactConsent from './Components/HomeContactConsent';
 import AdminAllUsersPage from './Pages/AdminAllUsersPage';
 import AdminPlatformActivityPage from './Pages/AdminPlatformActivityPage';
 import AdminAllBuddiesPage from './Pages/AdminAllBuddiesPage';
@@ -33,6 +36,8 @@ import AdminEmailPage from './Pages/AdminEmailPage';
 import AdminWhatsAppPage from './Pages/AdminWhatsAppPage';
 import AdminCouponsPage from './Pages/AdminCouponsPage';
 import AdminSupportRequestsPage from './Pages/AdminSupportRequestsPage';
+import AdminBookingsPage from './Pages/AdminBookingsPage';
+import AdminAdministratorsPage from './Pages/AdminAdministratorsPage';
 import ContactPage from './Pages/ContactPage';
 import SupportPage from './Pages/SupportPage';
 import CommunityGuidelinesPage from './Pages/CommunityGuidelinesPage';
@@ -196,7 +201,7 @@ function AppContent() {
   }, [profile?.id, user]);
 
   useEffect(() => {
-    if (location.pathname.startsWith('/admin')) return undefined;
+    if (!shouldTrackPageVisit(window.location.hostname, location.pathname)) return undefined;
 
     const storageKey = 'haango_visitor_id';
     let visitorId = localStorage.getItem(storageKey);
@@ -206,32 +211,48 @@ function AppContent() {
     }
 
     const sessionKey = 'haango_visit_session_id';
-    const startedKey = 'haango_visit_session_started_at';
     const pagesKey = 'haango_visit_session_pages';
+    const pageStartedKey = 'haango_visit_session_page_started_at';
     const pagePath = `${location.pathname}${location.search}`;
 
     if (!visitSessionRef.current) {
       visitSessionRef.current = sessionStorage.getItem(sessionKey)
         || (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
       sessionStorage.setItem(sessionKey, visitSessionRef.current);
-      sessionStorage.setItem(startedKey, String(Date.now()));
     }
 
     const existingPages = JSON.parse(sessionStorage.getItem(pagesKey) || '[]');
     const pageHistory = Array.isArray(existingPages) ? existingPages : [];
     const lastPage = pageHistory[pageHistory.length - 1];
-    const nextPageEntry = { page: pagePath, timeSpent: 0, timestamp: new Date().toISOString() };
+    const nextPageEntry = { page: pagePath, timeSpent: 0, timeSpentMs: 0, timestamp: new Date().toISOString() };
 
     if (!lastPage || lastPage.page !== pagePath) {
       pageHistory.push(nextPageEntry);
-      sessionStorage.setItem(pagesKey, JSON.stringify(pageHistory.slice(-30)));
+      sessionStorage.setItem(pagesKey, JSON.stringify(pageHistory));
     }
 
-    const startedAt = Number(sessionStorage.getItem(startedKey) || Date.now());
+    if (!sessionStorage.getItem(pageStartedKey)) {
+      sessionStorage.setItem(pageStartedKey, String(Date.now()));
+    }
+
     const visitId = visitSessionRef.current;
     const track = () => {
-      const timeSpent = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
       const currentPages = JSON.parse(sessionStorage.getItem(pagesKey) || '[]');
+      const trackedPages = Array.isArray(currentPages) ? currentPages : [];
+      const currentPage = trackedPages[trackedPages.length - 1];
+      const pageStartedAt = Number(sessionStorage.getItem(pageStartedKey) || Date.now());
+      if (currentPage?.page === pagePath) {
+        const previousTimeSpentMs = Number(currentPage.timeSpentMs ?? Number(currentPage.timeSpent || 0) * 1000);
+        currentPage.timeSpentMs = previousTimeSpentMs + Math.max(0, Date.now() - pageStartedAt);
+        currentPage.timeSpent = Math.round(currentPage.timeSpentMs / 1000);
+        sessionStorage.setItem(pagesKey, JSON.stringify(trackedPages));
+        sessionStorage.setItem(pageStartedKey, String(Date.now()));
+      }
+      const timeSpent = Math.round(trackedPages.reduce(
+        (total, page) => total + Number(page.timeSpentMs ?? Number(page.timeSpent || 0) * 1000),
+        0,
+      ) / 1000);
+
       apiRequest('/analytics/track', {
         method: 'POST',
         body: JSON.stringify({
@@ -241,26 +262,18 @@ function AppContent() {
           landingUrl: pagePath,
           timeSpent,
           referrer: document.referrer,
-          pagesVisited: Array.isArray(currentPages) ? currentPages.slice(-30) : [],
+          pagesVisited: trackedPages.map(({ page, timestamp, timeSpent: pageTimeSpent }) => ({
+            page,
+            timestamp,
+            timeSpent: pageTimeSpent,
+          })),
           userName: profile?.full_name || profile?.name || user?.name || user?.full_name || null,
         }),
         keepalive: true,
       }).catch(() => {});
     };
 
-    apiRequest('/analytics/track', {
-      method: 'POST',
-      body: JSON.stringify({
-        visitorId,
-        visitId,
-        page: pagePath,
-        landingUrl: pagePath,
-        timeSpent: 0,
-        referrer: document.referrer,
-        pagesVisited: pageHistory.slice(-30),
-        userName: profile?.full_name || profile?.name || user?.name || user?.full_name || null,
-      }),
-    }).catch(() => {});
+    track();
 
     const heartbeat = window.setInterval(() => {
       if (document.visibilityState === 'visible') track();
@@ -268,13 +281,20 @@ function AppContent() {
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') track();
+      else {
+        track();
+        sessionStorage.removeItem(pageStartedKey);
+      }
     };
 
+    let ended = false;
     const endSession = () => {
+      if (ended) return;
+      ended = true;
       track();
       sessionStorage.removeItem(sessionKey);
-      sessionStorage.removeItem(startedKey);
       sessionStorage.removeItem(pagesKey);
+      sessionStorage.removeItem(pageStartedKey);
       visitSessionRef.current = null;
     };
 
@@ -285,8 +305,9 @@ function AppContent() {
       window.clearInterval(heartbeat);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('pagehide', endSession);
-      if (!document.visibilityState || document.visibilityState === 'hidden') {
-        endSession();
+      if (!ended) {
+        track();
+        sessionStorage.removeItem(pageStartedKey);
       }
     };
   }, [location.pathname, location.search, profile?.full_name, profile?.name, user?.name, user?.full_name]);
@@ -394,11 +415,14 @@ function AppContent() {
       <main>
         <Routes>
           <Route path="/" element={
-            <HomePage
-              onNavigate={routeNavigate}
-              onSelectActivity={selectActivity}
-              onSelectBuddy={selectBuddy}
-            />
+            <>
+              <HomePage
+                onNavigate={routeNavigate}
+                onSelectActivity={selectActivity}
+                onSelectBuddy={selectBuddy}
+              />
+              <HomeContactConsent />
+            </>
           } />
 
           <Route path="/explore" element={
@@ -502,6 +526,11 @@ function AppContent() {
               ? <AdminAllUsersPage onNavigate={routeNavigate} />
               : <Navigate to="/" replace />
           } />
+          <Route path="/admin/bookings" element={
+            ['ADMIN', 'SUPER_ADMIN', 'MASTER_ADMIN'].includes(profile?.role)
+              ? <AdminBookingsPage onNavigate={routeNavigate} />
+              : <Navigate to="/" replace />
+          } />
           <Route path="/admin/platform-activity" element={
             ['ADMIN', 'SUPER_ADMIN', 'MASTER_ADMIN'].includes(profile?.role)
               ? <AdminPlatformActivityPage onNavigate={routeNavigate} />
@@ -532,6 +561,11 @@ function AppContent() {
               ? <AdminWhatsAppPage onNavigate={routeNavigate} />
               : <Navigate to="/" replace />
           } />
+          <Route path="/admin/contact-numbers" element={
+            ['ADMIN', 'SUPER_ADMIN', 'MASTER_ADMIN'].includes(profile?.role)
+              ? <AdminContactNumbersPage onNavigate={routeNavigate} />
+              : <Navigate to="/" replace />
+          } />
           <Route path="/admin/coupons" element={
             ['ADMIN', 'SUPER_ADMIN', 'MASTER_ADMIN'].includes(profile?.role)
               ? <AdminCouponsPage onNavigate={routeNavigate} />
@@ -541,6 +575,11 @@ function AppContent() {
             ['ADMIN', 'SUPER_ADMIN', 'MASTER_ADMIN'].includes(profile?.role)
               ? <AdminSupportRequestsPage onNavigate={routeNavigate} />
               : <Navigate to="/" replace />
+          } />
+          <Route path="/admin/administrators" element={
+            ['ADMIN', 'SUPER_ADMIN', 'MASTER_ADMIN'].includes(profile?.role)
+              ? <AdminAdministratorsPage onNavigate={routeNavigate} />
+              : <Navigate to="/admin" replace />
           } />
 
           <Route path="/login" element={

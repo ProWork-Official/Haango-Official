@@ -1,10 +1,11 @@
-import { Activity, AlertCircle, BadgeCheck, Check, ClipboardList, Headset, IndianRupee, LayoutDashboard, Mail, MessageCircle, MessageSquareText, Ticket, Users } from 'lucide-react';
+import { Activity, AlertCircle, BadgeCheck, Calendar, Check, ClipboardList, Headset, IndianRupee, LayoutDashboard, Mail, MessageCircle, MessageSquareText, Shield, Ticket, Users } from 'lucide-react';
 
 const navigationItems = [
   { id: 'dashboard', label: 'Dashboard', path: '/admin', Icon: LayoutDashboard },
   { id: 'platform-activity', label: 'Platform activity', path: '/admin/platform-activity', Icon: Activity },
   { id: 'users', label: 'Users', path: '/admin/users', Icon: Users },
   { id: 'buddies', label: 'Buddies', path: '/admin/buddies', Icon: BadgeCheck },
+  { id: 'bookings', label: 'Bookings', path: '/admin/bookings', Icon: Calendar },
   { id: 'reports', label: 'Reports', path: '/admin/reports', Icon: AlertCircle },
   { id: 'reviews', label: 'Reviews', path: '/admin/reviews', Icon: MessageSquareText },
   { id: 'email', label: 'Email campaigns', path: '/admin/emails', Icon: Mail },
@@ -15,6 +16,7 @@ const navigationItems = [
   { id: 'haango-earnings', label: 'Haango earnings', path: '/admin#admin-metrics', Icon: ClipboardList },
   { id: 'coupons', label: 'Manage coupons', path: '/admin/coupons', Icon: Ticket },
   { id: 'support', label: 'Support tickets', path: '/admin/support-requests', Icon: Headset },
+  { id: 'administrators', label: 'Admin accounts', path: '/admin/administrators', Icon: Shield },
 ];
 
 export default function AdminLayout({ activePage = 'dashboard', onNavigate, children }) {

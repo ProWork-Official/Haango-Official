@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Activity, ArrowLeft, BadgeCheck, CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, Copy, Eye, Heart, Mail, MapPin, Phone, Search, Trash2, UserRound, Users, WalletCards, X } from 'lucide-react';
 import { apiRequest } from '../lib/api';
+import { formatLastActive } from '../lib/adminActivity';
 import HaangoDialog from '../Components/HaangoDialog';
 import AdminLayout from '../Components/AdminLayout';
 
@@ -13,20 +14,6 @@ const formatDuration = (seconds = 0) => {
   if (hours) return `${hours}h ${minutes}m`;
   if (minutes) return `${minutes}m ${remainingSeconds}s`;
   return `${remainingSeconds}s`;
-};
-
-const formatLastActive = (date, now, isCurrentlyActive = false) => {
-  if (!date) return 'No activity recorded';
-  if (isCurrentlyActive) return 'Active Now';
-  const elapsed = Math.max(0, now - new Date(date).getTime());
-  if (!Number.isFinite(elapsed)) return 'No activity recorded';
-  const minutes = Math.floor(elapsed / 60000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
 };
 
 const getActivityStatus = (date, now) => {
@@ -188,10 +175,13 @@ export default function AdminAllUsersPage({ onNavigate }) {
   };
 
   const getLastActiveLabel = (user) => {
-    if (!user.lastSeenAt) return '—';
-    const elapsed = Math.max(0, currentTime - new Date(user.lastSeenAt).getTime());
-    if (user.isActive && elapsed <= 2 * 60 * 1000) return 'Active Now';
-    return formatLastActive(user.lastSeenAt, currentTime);
+    const lastActiveAt = user.lastActiveAt ?? user.lastSeenAt;
+    const isCurrentlyActive = Boolean(
+      user.isActive
+      && user.lastSeenAt
+      && currentTime - new Date(user.lastSeenAt).getTime() <= 2 * 60 * 1000
+    );
+    return formatLastActive(lastActiveAt, currentTime, isCurrentlyActive);
   };
 
   const saveUser = async (event) => {
@@ -314,7 +304,7 @@ export default function AdminAllUsersPage({ onNavigate }) {
                 <tbody className="divide-y divide-[#edf1f7]">
                   {loading ? <tr><td colSpan="7" className="px-4 py-14 text-center text-sm text-ink-500">Loading users...</td></tr> : users.length ? users.map((user, index) => {
                     const initials = String(user.name || '?').trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('');
-                    const activeNow = Boolean(currentTime && user.isActive && user.lastSeenAt && currentTime - new Date(user.lastSeenAt).getTime() <= 5 * 60 * 1000);
+                    const lastActiveLabel = getLastActiveLabel(user);
                     return <tr key={user._id} tabIndex={0} aria-label={`Edit ${user.name}`} onClick={() => openUserEditor(user)} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); openUserEditor(user); } }} className="cursor-pointer transition hover:bg-[#fbfcff] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-300">
                       <td className="px-4 py-3.5 text-xs font-semibold text-ink-500">{(page - 1) * (pagination?.limit || 10) + index + 1}</td>
                       <td className="px-3 py-3.5"><div className="flex min-w-44 items-center gap-3"><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold ${user.role === 'BUDDY' ? 'bg-orange-100 text-[#e95718]' : 'bg-blue-100 text-blue-700'}`}>{initials || '?'}</span><span className="truncate text-sm font-semibold text-ink-800">{user.name}</span></div></td>
@@ -322,7 +312,7 @@ export default function AdminAllUsersPage({ onNavigate }) {
                       <td className="whitespace-nowrap px-3 py-3.5 text-xs text-ink-600">{user.phone}</td>
                       <td className="whitespace-nowrap px-3 py-3.5 text-xs text-ink-600">{user.dateOfBirth ? new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(user.dateOfBirth)) : '—'}</td>
                       <td className="px-3 py-3.5"><span className={`rounded-full px-2.5 py-1.5 text-[10px] font-bold ${user.role === 'BUDDY' ? 'bg-orange-50 text-orange-700' : 'bg-blue-50 text-blue-700'}`}>{user.role === 'BUDDY' ? 'Buddy' : 'Customer'}</span></td>
-                      <td className="whitespace-nowrap px-3 py-3.5 text-xs">{activeNow ? <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-700"><span className="h-2 w-2 rounded-full bg-emerald-500" />Active Now</span> : <span className="text-ink-500">{getLastActiveLabel(user)}</span>}</td>
+                      <td className="whitespace-nowrap px-3 py-3.5 text-xs">{lastActiveLabel === 'Active Now' ? <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-700"><span className="h-2 w-2 rounded-full bg-emerald-500" />{lastActiveLabel}</span> : <span className="text-ink-500">{lastActiveLabel}</span>}</td>
                     </tr>;
                   }) : <tr><td colSpan="7" className="px-4 py-14 text-center"><p className="text-sm font-semibold text-ink-700">No users found</p><p className="mt-1 text-xs text-ink-500">Try another name, email, or phone number.</p></td></tr>}
                 </tbody>

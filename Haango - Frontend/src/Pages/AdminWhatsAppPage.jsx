@@ -94,10 +94,15 @@ export default function AdminWhatsAppPage({ onNavigate }) {
           {error && <p className="mb-4 rounded-xl bg-error-50 p-3 text-sm text-error-600" role="alert">{error}</p>}
           {notice && <p className="mb-4 rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-sm text-emerald-800" role="status">{notice}</p>}
 
-          <div className="mb-5 grid gap-3 sm:grid-cols-3">
+          <div className="mb-5 grid gap-3 sm:grid-cols-4">
             <section className="rounded-xl border border-[#e8edf6] bg-white p-4"><span className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-700"><Users size={18} /></span><p className="font-display text-2xl font-extrabold text-ink-900">{loading ? '—' : Number(status?.eligibleRecipientCount || 0).toLocaleString('en-IN')}</p><p className="mt-1 text-xs text-ink-500">Active opted-in signups</p></section>
             <section className="rounded-xl border border-[#e8edf6] bg-white p-4"><span className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700"><MessageCircle size={18} /></span><p className="font-display text-lg font-bold text-ink-900">No API setup needed</p><p className="mt-1 text-xs text-ink-500">Opens your WhatsApp Business app or web session.</p></section>
             <section className="rounded-xl border border-[#e8edf6] bg-white p-4"><span className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-orange-50 text-[#e95718]"><Phone size={18} /></span><p className="font-display text-lg font-bold text-ink-900">{status?.invalidPhoneCount || 0} invalid numbers</p><p className="mt-1 text-xs text-ink-500">10-digit numbers use +{status?.defaultCountryCode || '91'}.</p></section>
+            <button type="button" onClick={() => onNavigate('/admin/contact-numbers')} className="rounded-xl border border-[#e8edf6] bg-white p-4 text-left transition hover:border-orange-200 hover:shadow-sm">
+              <span className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-orange-50 text-[#e95718]"><Phone size={18} /></span>
+              <span className="block font-display text-lg font-bold text-ink-900">Contact numbers</span>
+              <span className="mt-1 block text-xs text-ink-500">View contacts people chose to share.</span>
+            </button>
           </div>
 
           <p className="mb-5 text-xs text-ink-500">Each contact opens separately. Review the draft and press Send in WhatsApp; this page does not send messages automatically.</p>

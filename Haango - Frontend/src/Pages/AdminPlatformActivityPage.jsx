@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, ArrowLeft, ArrowRight, Clock3, Globe2, MapPin, RefreshCw, Users, UserRound } from 'lucide-react';
+import { Activity, ArrowLeft, ArrowRight, Globe2, MapPin, RefreshCw, Users, UserRound } from 'lucide-react';
 import { apiRequest } from '../lib/api';
+import { inferPageDurations } from '../lib/adminActivity';
 import AdminLayout from '../Components/AdminLayout';
 
 const unwrap = (value) => value?.data ?? value ?? {};
@@ -10,6 +11,7 @@ const unwrapList = (value) => {
 };
 const sourceLabels = {
   DIRECT: 'Direct visit',
+  GMAIL: 'Gmail',
   GOOGLE_SEARCH: 'Google search',
   SOCIAL: 'Social media',
   FACEBOOK: 'Facebook',
@@ -52,6 +54,7 @@ const normalizeSourceValue = (source, sourceDetail = '') => {
   if (/DISCORD/.test(rawSource) || /discord/.test(detail)) return 'DISCORD';
   if (/REDDIT/.test(rawSource) || /reddit|redd\.it/.test(detail)) return 'REDDIT';
   if (/TIKTOK/.test(rawSource) || /tiktok/.test(detail)) return 'TIKTOK';
+  if (/GMAIL/.test(rawSource) || /gmail|googlemail|mail\.google/.test(detail)) return 'GMAIL';
   if (/WHATSAPP/.test(rawSource) || /whatsapp|wa\.me/.test(detail)) return 'WHATSAPP';
   if (/GOOGLE/.test(rawSource) || /google/.test(detail)) return 'GOOGLE_SEARCH';
   if (/CUSTOM_SHARE/.test(rawSource) || /share/.test(detail)) return 'CUSTOM_SHARE';
@@ -85,6 +88,7 @@ const formatSourceDetail = (source, sourceDetail = '') => {
 };
 const getSourceBrand = (source, sourceDetail = '') => {
   const normalized = normalizeSourceValue(source, sourceDetail);
+  if (normalized === 'GMAIL') return { name: 'Gmail', tone: 'bg-red-50 text-red-700 border-red-200' };
   if (normalized === 'GOOGLE_SEARCH') return { name: 'Google', tone: 'bg-white text-blue-600 border-[#e4ebf7]' };
   if (normalized === 'FACEBOOK') return { name: 'Facebook', tone: 'bg-blue-50 text-blue-700 border-[#d7e6ff]' };
   if (normalized === 'INSTAGRAM') return { name: 'Instagram', tone: 'bg-gradient-to-br from-[#f58529] via-[#dd2a7b] to-[#8134af] text-white border-transparent' };
@@ -114,6 +118,20 @@ const SourceIcon = ({ source, sourceDetail }) => {
           <path d="M12 22c2.7 0 4.97-.9 6.63-2.44l-3.25-2.55c-.9.6-2.09.97-3.38.97-2.6 0-4.8-1.75-5.58-4.09H.05v2.66A10 10 0 0 0 12 22Z" fill="#34A853"/>
           <path d="M6.42 19.86A6.06 6.06 0 0 1 6 16.7V14.1H2.62A9.96 9.96 0 0 0 2 12c0-1.62.39-3.16 1.08-4.52L6.57 10A5.97 5.97 0 0 1 6.42 12c0 .7.12 1.38.35 2.02l-.35.84Z" fill="#FBBC05"/>
           <path d="M12 4.98c1.17 0 2.23.4 3.06 1.18l2.25-2.25A9.95 9.95 0 0 0 12 2a10 10 0 0 0-9.95 8.1h3.96A6 6 0 0 1 12 4.98Z" fill="#EA4335"/>
+        </svg>
+      </span>
+    );
+  }
+
+  if (sourceValue === 'GMAIL') {
+    return (
+      <span className={`${common} bg-white border-[#e4ebf7]`} aria-label="Gmail logo">
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="4.5" width="18" height="15" rx="2.5" fill="white" stroke="#DADCE0"/>
+          <path d="M4 7v10" stroke="#4285F4" strokeWidth="2.4" strokeLinecap="round"/>
+          <path d="m4.2 6.8 7.8 5.9 7.8-5.9" stroke="#EA4335" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M20 7v10" stroke="#34A853" strokeWidth="2.4" strokeLinecap="round"/>
+          <path d="M4.5 18.5h15" stroke="#DADCE0" strokeWidth="1"/>
         </svg>
       </span>
     );
@@ -203,10 +221,10 @@ const SourceIcon = ({ source, sourceDetail }) => {
 
   if (sourceValue === 'WHATSAPP') {
     return (
-      <span className={`${common} ${brand.tone}`} aria-label="WhatsApp logo">
-        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-          <path d="M19.05 4.95A9.86 9.86 0 0 0 12.1 2a9.9 9.9 0 0 0-8.72 15.15L2 22l4.96-1.3A9.9 9.9 0 1 0 19.05 4.95Zm-6.95 14.35c-1.14 0-2.27-.3-3.27-.86l-.23-.14-2.94.77.79-2.86-.15-.24A8.07 8.07 0 0 1 3.9 12a8.14 8.14 0 1 1 14.14 5.74l-.18.2-1.96 1.7.68 2.36-2.43-.66-.18-.12c-.94-.51-1.95-.77-2.98-.77Z"/>
-          <path d="M15.9 13.8c-.2-.1-1.18-.58-1.36-.65-.18-.06-.31-.1-.44.1-.13.2-.5.65-.62.78-.12.13-.23.14-.43.05-.2-.1-.84-.31-1.6-.98-.59-.52-.98-1.16-1.1-1.36-.12-.2-.01-.31.09-.41.1-.1.2-.23.3-.35.1-.12.12-.2.18-.34.06-.14.03-.26-.02-.36-.05-.1-.44-1.06-.6-1.45-.16-.39-.32-.34-.44-.34h-.38c-.13 0-.34.05-.52.25-.18.2-.7.68-.7 1.67s.71 1.94.81 2.08c.1.14 1.4 2.13 3.39 2.99.47.2.84.32 1.13.41.47.15.9.13 1.24.08.38-.06 1.17-.48 1.34-.94.16-.46.16-.85.11-.94-.05-.09-.18-.14-.38-.24Z" fill="white"/>
+      <span className={`${common} rounded-full border-[#25D366] bg-[#25D366]`} aria-label="WhatsApp logo">
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M19.05 4.95A9.86 9.86 0 0 0 12.1 2a9.9 9.9 0 0 0-8.72 15.15L2 22l4.96-1.3A9.9 9.9 0 1 0 19.05 4.95Z" stroke="white" strokeWidth="1.7" strokeLinejoin="round"/>
+          <path d="M15.9 13.8c-.2-.1-1.18-.58-1.36-.65-.18-.06-.31-.1-.44.1-.13.2-.5.65-.62.78-.12.13-.23.14-.43.05-.2-.1-.84-.31-1.6-.98-.59-.52-.98-1.16-1.1-1.36-.12-.2-.01-.31.09-.41.1-.1.2-.23.3-.35.1-.12.12-.2.18-.34.06-.14.03-.26-.02-.36-.05-.1-.44-1.06-.6-1.45-.16-.39-.32-.34-.44-.34h-.38c-.13 0-.34.05-.52.25-.18.2-.7.68-.7 1.67s.71 1.94.81 2.08c.1.14 1.4 2.13 3.39 2.99.47.2.84.32 1.13.41.47.15.9.08 1.24.08.38-.06 1.17-.48 1.34-.94.16-.46.11-.85-.05-.94-.05-.09-.18-.14-.38-.24Z" fill="white"/>
         </svg>
       </span>
     );
@@ -418,15 +436,25 @@ export default function AdminPlatformActivityPage({ onNavigate }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showLivePopup, setShowLivePopup] = useState(false);
-  const [selectedSession, setSelectedSession] = useState(null);
+  const [selectedVisitor, setSelectedVisitor] = useState(null);
+  const [currentTime, setCurrentTime] = useState(0);
 
-  const recentVisitSessions = useMemo(() => {
-    const groups = new Map();
+  const recentVisitors = useMemo(() => {
+    const visitors = new Map();
 
     (Array.isArray(activity.recentVisits) ? activity.recentVisits : []).forEach((visit) => {
-      const sessionKey = visit?.visitId || visit?.visitorId || visit?.id || `${visit?.displayName || 'guest'}-${visit?.lastSeenAt || visit?.timestamp || Date.now()}`;
-      if (!groups.has(sessionKey)) {
-        groups.set(sessionKey, {
+      const visitorKey = visit?.visitorId || visit?.id;
+      if (!visitors.has(visitorKey)) {
+        visitors.set(visitorKey, {
+          visitorKey,
+          sessions: new Map(),
+        });
+      }
+
+      const visitor = visitors.get(visitorKey);
+      const sessionKey = visit?.visitId || visit?.id;
+      if (!visitor.sessions.has(sessionKey)) {
+        visitor.sessions.set(sessionKey, {
           sessionKey,
           source: visit?.source,
           sourceDetail: visit?.sourceDetail,
@@ -442,7 +470,7 @@ export default function AdminPlatformActivityPage({ onNavigate }) {
         });
       }
 
-      const group = groups.get(sessionKey);
+      const session = visitor.sessions.get(sessionKey);
       const entries = Array.isArray(visit?.pagesVisited) && visit.pagesVisited.length
         ? visit.pagesVisited.map((pageStep) => ({
             page: pageStep?.page || visit?.page,
@@ -451,34 +479,61 @@ export default function AdminPlatformActivityPage({ onNavigate }) {
           }))
         : [{ page: visit?.page, timestamp: visit?.timestamp, timeSpent: Number(visit?.timeSpent || 0) }];
 
-      group.pagesVisited.push(...entries);
-      group.pagesVisited = [...group.pagesVisited]
+      session.pagesVisited.push(...entries);
+      session.pagesVisited = [...session.pagesVisited]
         .filter((entry) => entry?.page)
         .sort((left, right) => new Date(left.timestamp || 0) - new Date(right.timestamp || 0));
-      group.lastSeenAt = group.pagesVisited.length
-        ? new Date(Math.max(...group.pagesVisited.map((entry) => new Date(entry.timestamp || 0).getTime())))
-        : new Date(group.lastSeenAt || group.timestamp || Date.now());
-      group.timestamp = group.pagesVisited.length ? group.pagesVisited[0].timestamp : group.timestamp;
-      group.page = group.pagesVisited.length ? group.pagesVisited[0].page : group.page;
+      const sessionTimestamps = [
+        session.lastSeenAt,
+        visit?.lastSeenAt,
+        ...session.pagesVisited.map((entry) => entry.timestamp),
+      ]
+        .filter(Boolean)
+        .map((timestamp) => new Date(timestamp).getTime())
+        .filter(Number.isFinite);
+      session.lastSeenAt = sessionTimestamps.length
+        ? new Date(Math.max(...sessionTimestamps))
+        : new Date(session.timestamp || 0);
+      session.timestamp = session.pagesVisited.length ? session.pagesVisited[0].timestamp : session.timestamp;
+      session.page = session.pagesVisited.length ? session.pagesVisited[0].page : session.page;
     });
 
-    return [...groups.values()].map((session) => {
-      const normalizedPages = (session.pagesVisited || []).map((entry) => ({
-        page: entry.page,
-        timestamp: entry.timestamp || session.timestamp,
-        timeSpent: Number(entry.timeSpent || 0),
-      }));
-      const totalTimeSpent = normalizedPages.reduce((sum, entry) => sum + Number(entry.timeSpent || 0), 0);
+    return [...visitors.values()].map((visitor) => {
+      const sessions = [...visitor.sessions.values()].map((session) => {
+        const pages = (session.pagesVisited || []).map((entry) => ({
+          page: entry.page,
+          timestamp: entry.timestamp || session.timestamp,
+          timeSpent: Number(entry.timeSpent || 0),
+        }));
+        const pagesVisited = inferPageDurations(pages, session.lastSeenAt);
+        const totalTimeSpent = pagesVisited.reduce((sum, entry) => sum + Number(entry.timeSpent || 0), 0);
+        return {
+          ...session,
+          pagesVisited,
+          totalTimeSpent,
+          landingPage: pagesVisited[0]?.page || session.page,
+          sessionStartedAt: pagesVisited[0]?.timestamp || session.timestamp,
+          sessionEndedAt: session.lastSeenAt,
+        };
+      }).sort((left, right) => new Date(right.sessionStartedAt || right.timestamp || 0) - new Date(left.sessionStartedAt || left.timestamp || 0));
+      const latestSession = sessions[0];
+
       return {
-        ...session,
-        pagesVisited: normalizedPages,
-        totalTimeSpent,
-        landingPage: normalizedPages[0]?.page || session.page,
-        sessionStartedAt: normalizedPages[0]?.timestamp || session.timestamp,
-        sessionEndedAt: normalizedPages[normalizedPages.length - 1]?.timestamp || session.lastSeenAt,
+        ...latestSession,
+        visitorKey: visitor.visitorKey,
+        sessions,
+        totalPageCount: sessions.reduce((total, session) => total + session.pagesVisited.length, 0),
       };
-    }).sort((left, right) => new Date(right.sessionEndedAt || right.lastSeenAt || right.timestamp || 0) - new Date(left.sessionEndedAt || left.lastSeenAt || left.timestamp || 0));
+    }).filter((visitor) => visitor.sessions.length)
+      .sort((left, right) => new Date(right.sessionStartedAt || right.timestamp || 0) - new Date(left.sessionStartedAt || left.timestamp || 0));
   }, [activity.recentVisits]);
+
+  useEffect(() => {
+    const updateCurrentTime = () => setCurrentTime(Date.now());
+    updateCurrentTime();
+    const timer = window.setInterval(updateCurrentTime, 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -509,7 +564,7 @@ export default function AdminPlatformActivityPage({ onNavigate }) {
   const liveVisits = Array.isArray(activity.recentVisits)
     ? activity.recentVisits.filter((visit) => {
         const timestamp = visit?.lastSeenAt ? new Date(visit.lastSeenAt).getTime() : visit?.timestamp ? new Date(visit.timestamp).getTime() : 0;
-        return Number.isFinite(timestamp) && Date.now() - timestamp <= liveMinutes * 60 * 1000;
+        return Number.isFinite(timestamp) && currentTime - timestamp <= liveMinutes * 60 * 1000;
       })
     : [];
   const liveVisitDetails = liveVisits.slice(0, 5);
@@ -633,8 +688,8 @@ export default function AdminPlatformActivityPage({ onNavigate }) {
                 <table className="w-full min-w-190 border-collapse text-left">
                   <thead className="sticky top-0 bg-[#f6f8fc] text-[11px] font-semibold text-ink-500"><tr><th className="px-4 py-3">Source</th><th className="px-3 py-3">Visitor</th><th className="px-3 py-3">Location</th><th className="px-3 py-3">Landing Page</th><th className="px-3 py-3">Time</th></tr></thead>
                   <tbody className="divide-y divide-[#edf1f7]">
-                    {recentVisitSessions.length ? recentVisitSessions.map((visit) => (
-                      <tr key={visit.sessionKey} className="cursor-pointer hover:bg-[#fbfcff]" onClick={() => setSelectedSession(visit)}>
+                    {recentVisitors.length ? recentVisitors.map((visit) => (
+                      <tr key={visit.visitorKey} className="cursor-pointer hover:bg-[#fbfcff]" onClick={() => setSelectedVisitor(visit)}>
                         <td className="max-w-48 px-4 py-3">
                           <div className="flex items-center gap-3">
                             <SourceIcon source={visit.source} sourceDetail={visit.sourceDetail} />
@@ -652,7 +707,7 @@ export default function AdminPlatformActivityPage({ onNavigate }) {
                         </td>
                         <td className="min-w-36 px-3 py-3 text-xs text-ink-600"><span className="inline-flex items-center gap-1.5"><MapPin size={12} className="shrink-0 text-ink-400" />{visit.location || 'Unknown'}</span></td>
                         <td className="max-w-52 px-3 py-3 text-xs text-ink-700">
-                          <button type="button" onClick={(event) => { event.stopPropagation(); setSelectedSession(visit); }} className="flex min-w-0 flex-col text-left transition hover:text-blue-700">
+                          <button type="button" onClick={(event) => { event.stopPropagation(); setSelectedVisitor(visit); }} className="flex min-w-0 flex-col text-left transition hover:text-blue-700">
                             <span className="truncate font-semibold text-ink-700">{formatPageLabel(visit.landingPage || visit.page)}</span>
                             <span className="truncate text-[10px] text-ink-400">{getPagePathDisplay(visit.landingPage || visit.page)}</span>
                           </button>
@@ -662,6 +717,7 @@ export default function AdminPlatformActivityPage({ onNavigate }) {
                             <span className="h-2.5 w-2.5 rounded-full bg-[#ff681f]" />
                             <span>{formatDuration(visit.totalTimeSpent || 0)}</span>
                           </div>
+                          <p className="mt-1 text-right text-[10px] text-ink-400">{visit.sessions.length} sessions · {visit.totalPageCount} pages</p>
                         </td>
                       </tr>
                     )) : <tr><td colSpan="5" className="px-4 py-12 text-center text-sm text-ink-500">No page visits recorded in this period.</td></tr>}
@@ -722,32 +778,32 @@ export default function AdminPlatformActivityPage({ onNavigate }) {
             <p className="inline-flex items-center gap-2 text-[11px] text-ink-400"><RefreshCw size={12} /> Activity is based on browser visit records and may include repeat page views. IP locations can be approximate or unavailable.</p>
           </>}
 
-          {selectedSession && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/35 p-4 backdrop-blur-[1px]" onClick={() => setSelectedSession(null)}>
+          {selectedVisitor && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/35 p-4 backdrop-blur-[1px]" onClick={() => setSelectedVisitor(null)}>
               <div className="w-full max-w-2xl rounded-2xl border border-[#e8edf6] bg-white p-5 shadow-[0_20px_50px_rgba(15,23,42,0.18)]" onClick={(event) => event.stopPropagation()}>
                 <div className="mb-4 flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-ink-500">Session details</p>
-                    <h3 className="mt-1 font-display text-xl font-bold text-ink-900">{selectedSession.displayName || 'Guest visitor'}</h3>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-ink-500">Visitor sessions · {selectedVisitor.sessions.length}</p>
+                    <h3 className="mt-1 font-display text-xl font-bold text-ink-900">{selectedVisitor.displayName || 'Guest visitor'}</h3>
                   </div>
-                  <button type="button" onClick={() => setSelectedSession(null)} className="rounded-full border border-[#e8edf6] bg-[#f8faff] px-3 py-1.5 text-xs font-semibold text-ink-600 hover:bg-[#eef4ff]">Close</button>
+                  <button type="button" onClick={() => setSelectedVisitor(null)} className="rounded-full border border-[#e8edf6] bg-[#f8faff] px-3 py-1.5 text-xs font-semibold text-ink-600 hover:bg-[#eef4ff]">Close</button>
                 </div>
 
                 <div className="mb-4 grid gap-3 sm:grid-cols-3">
                   <div className="rounded-xl border border-[#edf1f7] bg-[#f8faff] p-3">
-                    <p className="text-[10px] uppercase tracking-[0.08em] text-ink-500">Source</p>
+                    <p className="text-[10px] uppercase tracking-[0.08em] text-ink-500">Latest session source</p>
                     <div className="mt-2 flex items-center gap-2">
-                      <SourceIcon source={selectedSession.source} sourceDetail={selectedSession.sourceDetail} />
-                      <span className="text-sm font-semibold text-ink-800">{getSourceBrand(selectedSession.source, selectedSession.sourceDetail).name}</span>
+                      <SourceIcon source={selectedVisitor.source} sourceDetail={selectedVisitor.sourceDetail} />
+                      <span className="text-sm font-semibold text-ink-800">{getSourceBrand(selectedVisitor.source, selectedVisitor.sourceDetail).name}</span>
                     </div>
                   </div>
                   <div className="rounded-xl border border-[#edf1f7] bg-[#f8faff] p-3">
-                    <p className="text-[10px] uppercase tracking-[0.08em] text-ink-500">Started</p>
-                    <p className="mt-2 text-sm font-semibold text-ink-800">{formatVisitTime(selectedSession.sessionStartedAt || selectedSession.timestamp)}</p>
+                    <p className="text-[10px] uppercase tracking-[0.08em] text-ink-500">Latest session started</p>
+                    <p className="mt-2 text-sm font-semibold text-ink-800">{formatVisitTime(selectedVisitor.sessionStartedAt || selectedVisitor.timestamp)}</p>
                   </div>
                   <div className="rounded-xl border border-[#edf1f7] bg-[#f8faff] p-3">
-                    <p className="text-[10px] uppercase tracking-[0.08em] text-ink-500">Session time</p>
-                    <p className="mt-2 text-sm font-semibold text-ink-800">{formatDuration(selectedSession.totalTimeSpent || 0)}</p>
+                    <p className="text-[10px] uppercase tracking-[0.08em] text-ink-500">Pages across sessions</p>
+                    <p className="mt-2 text-sm font-semibold text-ink-800">{selectedVisitor.totalPageCount}</p>
                   </div>
                 </div>
 
@@ -755,24 +811,38 @@ export default function AdminPlatformActivityPage({ onNavigate }) {
                   <table className="w-full border-collapse text-left">
                     <thead className="sticky top-0 bg-[#f5f8fd] text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-500">
                       <tr>
+                        <th className="px-4 py-3">Source</th>
                         <th className="px-4 py-3">Page</th>
                         <th className="px-4 py-3">Time on page</th>
                         <th className="px-4 py-3">Visited at</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#edf1f7]">
-                      {(selectedSession.pagesVisited || []).map((pageStep, index) => (
-                        <tr key={`${selectedSession.sessionKey || selectedSession.displayName}-${pageStep.page}-${index}`} className="bg-white">
-                          <td className="px-4 py-3 text-sm font-semibold text-ink-800">
-                            <div className="min-w-0">
-                              <p className="truncate">{formatPageLabel(pageStep.page)}</p>
-                              <p className="truncate text-[10px] text-ink-500">{getPagePathDisplay(pageStep.page)}</p>
+                      {selectedVisitor.sessions.flatMap((session, sessionIndex) => [
+                        <tr key={`${session.sessionKey}-heading`} className="bg-[#f8faff]">
+                          <td colSpan="4" className="px-4 py-3 text-xs font-bold text-ink-700">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span>Session {selectedVisitor.sessions.length - sessionIndex} · {formatVisitTime(session.sessionStartedAt || session.timestamp)}</span>
+                              <span className="font-medium text-ink-500">{formatDuration(session.totalTimeSpent || 0)}</span>
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-sm text-ink-700">{formatDuration(pageStep.timeSpent || 0)}</td>
-                          <td className="px-4 py-3 text-sm text-ink-600">{formatVisitTime(pageStep.timestamp)}</td>
-                        </tr>
-                      ))}
+                        </tr>,
+                        ...session.pagesVisited.map((pageStep, index) => (
+                          <tr key={`${session.sessionKey}-${pageStep.page}-${index}`} className="bg-white">
+                            <td className="px-4 py-3">
+                              {index === 0 && <SourceIcon source={session.source} sourceDetail={session.sourceDetail} />}
+                            </td>
+                            <td className="px-4 py-3 text-sm font-semibold text-ink-800">
+                              <div className="min-w-0">
+                                <p className="truncate">{formatPageLabel(pageStep.page)}</p>
+                                <p className="truncate text-[10px] text-ink-500">{getPagePathDisplay(pageStep.page)}</p>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-ink-700">{formatDuration(pageStep.timeSpent || 0)}</td>
+                            <td className="px-4 py-3 text-sm text-ink-600">{formatVisitTime(pageStep.timestamp)}</td>
+                          </tr>
+                        )),
+                      ])}
                     </tbody>
                   </table>
                 </div>

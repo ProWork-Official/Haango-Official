@@ -276,12 +276,13 @@ export default function AdminAllBuddiesPage({ onNavigate }) {
     { id: 'PENDING', label: 'Pending' },
     { id: 'VERIFIED', label: 'Verified' },
     { id: 'SUSPENDED', label: 'Suspended' },
+    { id: 'ACTIVE', label: 'Booked today' },
   ];
   const cards = [
-    { label: 'Total buddies', value: summary.totalBuddies, Icon: Users, color: 'orange' },
-    { label: 'Verified', value: summary.verifiedBuddies, Icon: BadgeCheck, color: 'blue' },
-    { label: 'Pending verification', value: summary.pendingBuddies, Icon: ShieldCheck, color: 'orange' },
-    { label: 'Active buddies', value: summary.activeBuddies, Icon: Activity, color: 'blue' },
+    { id: 'ALL', label: 'Total buddies', value: summary.totalBuddies, Icon: Users, color: 'orange' },
+    { id: 'VERIFIED', label: 'Verified', value: summary.verifiedBuddies, Icon: BadgeCheck, color: 'blue' },
+    { id: 'PENDING', label: 'Pending verification', value: summary.pendingBuddies, Icon: ShieldCheck, color: 'orange' },
+    { id: 'ACTIVE', label: 'Active buddies', value: summary.activeBuddies, Icon: Activity, color: 'blue' },
   ];
 
   return (
@@ -296,7 +297,14 @@ export default function AdminAllBuddiesPage({ onNavigate }) {
         </div>
 
         <div className="mb-5 grid grid-cols-2 gap-3 xl:grid-cols-4">
-          {cards.map(({ label, value, Icon, color }) => <article key={label} className="relative isolate min-h-30 overflow-hidden rounded-2xl border border-white bg-white p-4 shadow-[0_8px_24px_rgba(36,72,130,0.06)] sm:p-5"><span className={`absolute -bottom-8 -right-5 -z-10 h-24 w-24 rounded-full ${color === 'orange' ? 'bg-orange-50' : 'bg-blue-50'}`} /><span className={`mb-3 flex h-10 w-10 items-center justify-center rounded-full ${color === 'orange' ? 'bg-orange-100 text-[#ff681f]' : 'bg-blue-100 text-blue-600'}`}><Icon size={19} /></span><p className="font-display text-2xl font-extrabold text-ink-900">{value ?? 0}</p><p className="mt-1 text-xs font-medium text-ink-500">{label}</p></article>)}
+          {cards.map(({ id, label, value, Icon, color }) => <button
+            key={label}
+            type="button"
+            onClick={() => { setStatusFilter(id); setPage(1); }}
+            aria-label={`Filter buddy list: ${label}`}
+            aria-pressed={statusFilter === id}
+            className={`relative isolate min-h-30 overflow-hidden rounded-2xl border bg-white p-4 text-left shadow-[0_8px_24px_rgba(36,72,130,0.06)] outline-none transition hover:border-blue-200 focus-visible:ring-2 focus-visible:ring-blue-500 sm:p-5 ${statusFilter === id ? 'border-blue-300 ring-2 ring-blue-100' : 'border-white'}`}
+          ><span className={`absolute -bottom-8 -right-5 -z-10 h-24 w-24 rounded-full ${color === 'orange' ? 'bg-orange-50' : 'bg-blue-50'}`} /><span className={`mb-3 flex h-10 w-10 items-center justify-center rounded-full ${color === 'orange' ? 'bg-orange-100 text-[#ff681f]' : 'bg-blue-100 text-blue-600'}`}><Icon size={19} /></span><p className="font-display text-2xl font-extrabold text-ink-900">{value ?? 0}</p><p className="mt-1 text-xs font-medium text-ink-500">{label}</p></button>)}
         </div>
 
         {error && <p className="mb-4 rounded-xl bg-error-50 p-3 text-sm text-error-600" role="alert">{error}</p>}
@@ -306,7 +314,7 @@ export default function AdminAllBuddiesPage({ onNavigate }) {
               <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
               <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by name, email, phone, or city..." className="w-full rounded-full border border-[#e8edf6] bg-[#fafbfd] py-2.5 pl-9 pr-3 text-xs outline-none focus:border-blue-300" aria-label="Search buddies" />
             </div>
-            <div className="flex max-w-full gap-1 overflow-x-auto rounded-full bg-[#f4f7fc] p-1" aria-label="Filter buddies by verification status">
+            <div className="flex max-w-full gap-1 overflow-x-auto rounded-full bg-[#f4f7fc] p-1" aria-label="Filter buddies">
               {statusTabs.map((tab) => <button key={tab.id} onClick={() => { setStatusFilter(tab.id); setPage(1); }} className={`shrink-0 rounded-full px-3 py-2 text-xs font-semibold transition ${statusFilter === tab.id ? 'bg-white text-blue-700 shadow-sm' : 'text-ink-500 hover:text-ink-900'}`} aria-pressed={statusFilter === tab.id}>{tab.label}</button>)}
             </div>
           </div>
@@ -321,15 +329,17 @@ export default function AdminAllBuddiesPage({ onNavigate }) {
                   const initials = name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('');
                   const isPending = buddy.verificationStatus === 'PENDING';
                   const isSuspended = buddy.verificationStatus === 'SUSPENDED';
-                  return <tr key={buddy._id} tabIndex={0} aria-label={`Edit ${name}`} onClick={() => openEditForm(buddy, account)} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); openEditForm(buddy, account); } }} className="cursor-pointer transition hover:bg-[#fbfcff] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-300">
+                  const profileMissing = buddy.profileMissing === true;
+                  return <tr key={buddy._id} tabIndex={profileMissing ? -1 : 0} aria-label={profileMissing ? `${name} has not completed a buddy profile` : `Edit ${name}`} onClick={() => { if (!profileMissing) openEditForm(buddy, account); }} onKeyDown={(event) => { if (!profileMissing && event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); openEditForm(buddy, account); } }} className={`${profileMissing ? '' : 'cursor-pointer'} transition hover:bg-[#fbfcff] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-300`}>
                     <td className="px-4 py-3.5 text-xs font-semibold text-ink-500">{(page - 1) * (pagination?.limit || 10) + index + 1}</td>
                     <td className="px-3 py-3.5"><div className="flex min-w-44 items-center gap-3"><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold ${isSuspended ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-[#e95718]'}`}>{initials || '?'}</span><span className="truncate text-sm font-semibold text-ink-800">{name}</span></div></td>
                     <td className="max-w-56 truncate px-3 py-3.5 text-xs text-ink-600">{account.email || '—'}</td>
                     <td className="whitespace-nowrap px-3 py-3.5 text-xs text-ink-600">{account.phone || '—'}</td>
                     <td className="px-3 py-3.5"><span className="inline-flex max-w-32 items-center gap-1.5 truncate rounded-full bg-[#f4f7fc] px-2.5 py-1.5 text-xs text-ink-600"><MapPin size={13} className="shrink-0 text-blue-600" />{buddy.city || account.city || '—'}</span></td>
                     <td className="whitespace-nowrap px-3 py-3.5 text-xs font-semibold text-ink-700">₹{Number(buddy.hourlyRate || 0).toLocaleString('en-IN')}</td>
-                    <td className="px-3 py-3.5"><span className={`rounded-full px-2.5 py-1.5 text-[10px] font-bold ${isPending ? 'bg-amber-50 text-amber-700' : isSuspended ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>{buddy.verificationStatus || 'UNKNOWN'}</span></td>
+                    <td className="px-3 py-3.5"><span className={`rounded-full px-2.5 py-1.5 text-[10px] font-bold ${isPending ? 'bg-amber-50 text-amber-700' : isSuspended ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>{profileMissing ? 'PROFILE INCOMPLETE' : buddy.verificationStatus || 'UNKNOWN'}</span></td>
                     <td className="relative px-4 py-3.5 text-right" onClick={(event) => event.stopPropagation()}>
+                      {profileMissing ? <span className="text-xs text-ink-400">—</span> : <>
                       <button onClick={() => setOpenMenuId((current) => current === buddy._id ? null : buddy._id)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-ink-500 transition hover:bg-[#f0f4fb] hover:text-ink-900" aria-label={`Actions for ${name}`} aria-expanded={openMenuId === buddy._id}><EllipsisVertical size={18} /></button>
                       {openMenuId === buddy._id && <div className="absolute right-12 top-2 z-10 w-40 rounded-xl border border-[#e8edf6] bg-white p-1 text-left shadow-xl">
                         <button onClick={() => { openEditForm(buddy, account); setOpenMenuId(null); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-xs font-semibold text-ink-700 hover:bg-blue-50"><UserRound size={14} /> Edit</button>
@@ -338,6 +348,7 @@ export default function AdminAllBuddiesPage({ onNavigate }) {
                         {isSuspended && <button onClick={() => { setOpenMenuId(null); updateStatus(buddy, 'unsuspend'); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"><BadgeCheck size={14} /> Restore</button>}
                         <button onClick={() => { setOpenMenuId(null); deleteBuddy(buddy); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-xs font-semibold text-red-600 hover:bg-red-50"><Trash2 size={14} /> Delete</button>
                       </div>}
+                      </>}
                     </td>
                   </tr>;
                 }) : <tr><td colSpan="8" className="px-4 py-14 text-center"><p className="text-sm font-semibold text-ink-700">No buddies found</p><p className="mt-1 text-xs text-ink-500">Try another name, email, phone number, or status.</p></td></tr>}

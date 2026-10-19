@@ -239,7 +239,21 @@ export default function AdminPage({ onNavigate }) {
         </div>
         {error && <p className="mb-6 rounded-2xl bg-error-50 p-4 text-sm text-error-600">{error}</p>}
         {loading ? <p className="text-ink-500">Loading live admin data...</p> : <>
-          <div id="admin-metrics" className="mb-6 grid grid-cols-2 gap-3 xl:grid-cols-4">{metrics.map(([label, value, Icon], index) => <div key={label} className="relative isolate min-h-36 overflow-hidden rounded-2xl border border-white bg-white p-5 shadow-[0_8px_24px_rgba(36,72,130,0.06)]"><span className={`absolute -bottom-10 -right-7 -z-10 h-28 w-28 rounded-full ${index === 4 ? 'bg-emerald-50' : index === 5 ? 'bg-violet-50' : index % 2 ? 'bg-orange-50' : 'bg-blue-50'}`} /><span className={`mb-3 flex h-11 w-11 items-center justify-center rounded-full ${index === 4 ? 'bg-emerald-100 text-emerald-600' : index === 5 ? 'bg-violet-100 text-violet-600' : index % 2 ? 'bg-orange-100 text-[#ff681f]' : 'bg-blue-100 text-blue-600'}`}><Icon size={20} /></span><p className="font-display text-2xl font-extrabold text-ink-900">{value ?? 0}</p><p className="mt-1 text-sm font-medium text-ink-500">{label}</p><ArrowRight size={17} className={`absolute bottom-5 right-5 ${index % 2 ? 'text-[#ff681f]' : 'text-blue-600'}`} /></div>)}</div>
+          <div id="admin-metrics" className="mb-6 grid grid-cols-2 gap-3 xl:grid-cols-4">{metrics.map(([label, value, Icon], index) => {
+            const metricPath = label === 'Admins'
+              ? '/admin/administrators'
+              : label === 'Bookings'
+                ? '/admin/bookings'
+                : null;
+            const MetricCard = metricPath ? 'button' : 'div';
+            return <MetricCard
+              key={label}
+              type={metricPath ? 'button' : undefined}
+              onClick={metricPath ? () => onNavigate(metricPath) : undefined}
+              aria-label={label === 'Admins' ? 'Open admin accounts' : label === 'Bookings' ? 'Open all bookings' : undefined}
+              className={`relative isolate min-h-36 overflow-hidden rounded-2xl border border-white bg-white p-5 text-left shadow-[0_8px_24px_rgba(36,72,130,0.06)] ${metricPath ? 'cursor-pointer outline-none transition hover:border-blue-200 focus-visible:ring-2 focus-visible:ring-blue-500' : ''}`}
+            ><span className={`absolute -bottom-10 -right-7 -z-10 h-28 w-28 rounded-full ${index === 4 ? 'bg-emerald-50' : index === 5 ? 'bg-violet-50' : index % 2 ? 'bg-orange-50' : 'bg-blue-50'}`} /><span className={`mb-3 flex h-11 w-11 items-center justify-center rounded-full ${index === 4 ? 'bg-emerald-100 text-emerald-600' : index === 5 ? 'bg-violet-100 text-violet-600' : index % 2 ? 'bg-orange-100 text-[#ff681f]' : 'bg-blue-100 text-blue-600'}`}><Icon size={20} /></span><p className="font-display text-2xl font-extrabold text-ink-900">{value ?? 0}</p><p className="mt-1 text-sm font-medium text-ink-500">{label}</p><ArrowRight size={17} className={`absolute bottom-5 right-5 ${index % 2 ? 'text-[#ff681f]' : 'text-blue-600'}`} /></MetricCard>;
+          })}</div>
           <div className="mb-6 grid gap-4 xl:grid-cols-[1.35fr_1fr]">
               <section
                 role="link"
