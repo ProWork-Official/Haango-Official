@@ -4,17 +4,11 @@ import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { handleValidationErrors } from '../middleware/validate.js';
 import { adminBuddyUpdateValidator } from '../validators/index.js';
 import * as couponController from '../controllers/couponController.js';
-import * as contactSubmissionController from '../controllers/contactSubmissionController.js';
-import { query } from 'express-validator';
 
 const router = Router();
 
 router.use(requireAuth, requireAdmin);
 
-router.get('/contact-submissions', [
-  query('page').optional().isInt({ min: 1, max: Number.MAX_SAFE_INTEGER }).withMessage('Page must be a positive integer.'),
-  query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100.'),
-], handleValidationErrors, contactSubmissionController.adminListContactSubmissions);
 router.get('/dashboard', adminController.getDashboard);
 router.get('/user-stats', adminController.getUserStats);
 router.get('/users', adminController.getUsers);
