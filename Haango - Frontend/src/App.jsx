@@ -12,7 +12,6 @@ import MessagesPage from './Pages/MessagesPage';
 import DashboardPage from './Pages/DashboardPage';
 import ReferralsPage from './Pages/ReferralsPage';
 import AdminPage from './Pages/AdminPage';
-import AdminContactNumbersPage from './Pages/AdminContactNumbersPage';
 import FAQSection from './Components/FAQ';
 import AuthPage from './Pages/AuthPage';
 import ExperiencePage from './Pages/ExperiencePage';
@@ -27,7 +26,6 @@ import { AuthProvider, useAuth } from './lib/auth';
 import { apiRequest } from './lib/api';
 import { registerPushSubscription, requestBrowserNotificationPermission, triggerBrowserNotification } from './lib/browserNotifications';
 import { shouldTrackPageVisit } from './lib/pageVisitTracking';
-import HomeContactConsent from './Components/HomeContactConsent';
 import AdminAllUsersPage from './Pages/AdminAllUsersPage';
 import AdminPlatformActivityPage from './Pages/AdminPlatformActivityPage';
 import AdminAllBuddiesPage from './Pages/AdminAllBuddiesPage';
@@ -421,7 +419,6 @@ function AppContent() {
                 onSelectActivity={selectActivity}
                 onSelectBuddy={selectBuddy}
               />
-              <HomeContactConsent />
             </>
           } />
 
@@ -559,11 +556,6 @@ function AppContent() {
           <Route path="/admin/whatsapp" element={
             ['ADMIN', 'SUPER_ADMIN', 'MASTER_ADMIN'].includes(profile?.role)
               ? <AdminWhatsAppPage onNavigate={routeNavigate} />
-              : <Navigate to="/" replace />
-          } />
-          <Route path="/admin/contact-numbers" element={
-            ['ADMIN', 'SUPER_ADMIN', 'MASTER_ADMIN'].includes(profile?.role)
-              ? <AdminContactNumbersPage onNavigate={routeNavigate} />
               : <Navigate to="/" replace />
           } />
           <Route path="/admin/coupons" element={
