@@ -707,6 +707,17 @@ const adminCampaignTemplates = [
   ctaPath: 'https://haango.in/signup',
 },
 {
+  id: 'diwali_buddy_referral',
+  title: 'Diwali Special: Earn ₹300 for Referrals',
+  category: 'Existing customer',
+  recipientRole: 'BUDDY',
+  deliveryMode: 'broadcast',
+  subject: '🪔 Buddy, Get ₹300 FREE This Diwali with Haango!',
+  angle: 'Celebrate Diwali by referring friends to become Haango Buddies. Earn ₹25 in your Buddy wallet for every referred friend who signs up as a Buddy and completes their profile.',
+  ctaLabel: 'Refer a Friend',
+  ctaPath: 'https://haango.in/signup',
+},
+{
   id: 'find_your_buddy',
   title: 'Find Your Perfect Buddy on Haango',
   category: 'Non customer',
@@ -882,6 +893,22 @@ function getCampaignCopy(templateId, recipientName, variables) {
   callout: `User Coupons: WELCOME100`,
   calloutx: `Buddy Coupon: BUDDYBONUS75`,
 },
+
+  
+  diwali_buddy_referral: {
+    title: '🪔 Buddy, Get ₹300 FREE This Diwali!',
+    paragraphs: [
+      '🎉 This Diwali, celebrate with extra rewards! Refer your friends to join Haango as Buddies and earn ₹25 directly into your Buddy wallet for every friend who signs up as a Buddy and completes their profile.',
+      '💰 Refer 12 friends who complete their Buddy profiles and earn ₹300 FREE!',
+      '📲 How to claim your rewards? Open your Haango dashboard and share your referral code: (Example - USEREDE3C393) with your friends. Ask them to enter your referral code while signing up as a Buddy and complete their Buddy profile to qualify for your referral reward.',
+      '✨ Share Haango, invite your friends, and make this Diwali extra rewarding. The more eligible friends you refer, the more you earn!'
+    ],
+    callout: '🎁 Diwali Reward: ₹25 per successful referral',
+    calloutx: '🪔 Refer 12 Buddies = ₹300 FREE!',
+    referralCode: 'USEREDE3C393',
+  },
+
+
 find_your_buddy: {
   title: 'Your Perfect Buddy Is Just a Sign-Up Away!',
   paragraphs: [
@@ -977,7 +1004,11 @@ function buildAdminCampaignEmail({ templateId, recipientName, variables = {} }) 
     : template.ctaPath;
   const ctaUrlObject = new URL(referralPath, `${emailClientOrigin}/`);
   ctaUrlObject.searchParams.set('utm_source', 'gmail');
+  if (variables.campaignAttributionToken) {
+    ctaUrlObject.searchParams.set('campaign_link', String(variables.campaignAttributionToken));
+  }
   const ctaUrl = ctaUrlObject.toString();
+  const unsubscribeUrl = String(variables.unsubscribeUrl || `${env.clientUrl}/unsubscribe`);
   const safe = {
     greeting: escapeHtml(copy.greeting),
     title: escapeHtml(copy.title),
@@ -986,6 +1017,7 @@ function buildAdminCampaignEmail({ templateId, recipientName, variables = {} }) 
     calloutx: copy.calloutx ? escapeHtml(copy.calloutx) : '',
     ctaLabel: escapeHtml(template.ctaLabel),
     ctaUrl: escapeHtml(ctaUrl),
+    unsubscribeUrl: escapeHtml(unsubscribeUrl),
   };
   const text = [
     safe.greeting,
@@ -994,6 +1026,8 @@ function buildAdminCampaignEmail({ templateId, recipientName, variables = {} }) 
     safe.callout ? `\n${safe.callout}` : '',
     safe.calloutx ? `\n${safe.calloutx}` : '',
     `\n${template.ctaLabel}: ${ctaUrl}`,
+    '',
+    `Unsubscribe from Haango campaign emails: ${unsubscribeUrl}`,
     '',
     'Haango',
   ].filter(Boolean).join('\n');
@@ -1009,7 +1043,11 @@ function buildAdminCampaignEmail({ templateId, recipientName, variables = {} }) 
           ${safe.calloutx ? `<div style="margin:22px 0;padding:16px;border:1px solid #ffe1cc;border-radius:12px;background:#fff5ed;text-align:center;color:#c84c13;font-size:18px;font-weight:700">${safe.calloutx}</div>` : ''}
           <p style="margin:26px 0 0;text-align:center"><a href="${safe.ctaUrl}" style="display:inline-block;padding:13px 22px;border-radius:8px;background:#ff7418;color:#fff;text-decoration:none;font-weight:700">${safe.ctaLabel}</a></p>
         </div>
-        <div style="padding:18px 24px;background:#fafbfc;border-top:1px solid #edf0f4;text-align:center"><p style="margin:0;color:#98a2b3;font-size:11px;line-height:1.6">© ${new Date().getFullYear()} Haango. All rights reserved.</p></div>
+        <div style="padding:18px 24px;background:#fafbfc;border-top:1px solid #edf0f4;text-align:center">
+          <p style="margin:0 0 10px;color:#667085;font-size:12px;line-height:1.6">No longer want Haango campaign emails?</p>
+          <p style="margin:0 0 12px"><a href="${safe.unsubscribeUrl}" style="display:inline-block;padding:9px 16px;border-radius:7px;border:1px solid #d0d5dd;background:#fff;color:#344054;text-decoration:none;font-size:12px;font-weight:700">Unsubscribe</a></p>
+          <p style="margin:0;color:#98a2b3;font-size:11px;line-height:1.6">© ${new Date().getFullYear()} Haango. All rights reserved.</p>
+        </div>
       </div>
     </div>
   `;
@@ -1017,11 +1055,18 @@ function buildAdminCampaignEmail({ templateId, recipientName, variables = {} }) 
   return { subject, text, html };
 }
 
-export function previewAdminCampaignEmail({ templateId, promoCode, milestone, referralCode, creditAmount }) {
+export function previewAdminCampaignEmail({
+  templateId,
+  promoCode,
+  milestone,
+  referralCode,
+  creditAmount,
+  campaignAttributionToken,
+}) {
   const email = buildAdminCampaignEmail({
     templateId,
     recipientName: 'there',
-    variables: { promoCode, milestone, referralCode, creditAmount },
+    variables: { promoCode, milestone, referralCode, creditAmount, campaignAttributionToken },
   });
   const logo = fs.readFileSync(logoPath).toString('base64');
 
@@ -1031,9 +1076,18 @@ export function previewAdminCampaignEmail({ templateId, promoCode, milestone, re
   };
 }
 
-export function isAdminCampaignSenderConfigured(senderProvider, configuration = env) {
+const senderAddresses = Object.freeze({
+  GMAIL: 'haangoofficial@gmail.com',
+  HOSTINGER: 'support@haango.in',
+});
+
+export function isAdminCampaignSenderConfigured(senderProvider, configuration = env, senderEmail = senderAddresses[senderProvider]) {
   if (senderProvider === 'GMAIL') {
-    return Boolean(configuration.officialEmailUser && configuration.officialEmailPass);
+    return Boolean(
+      senderEmail?.toLowerCase() === senderAddresses.GMAIL
+      && configuration.officialEmailUser?.toLowerCase() === senderAddresses.GMAIL
+      && configuration.officialEmailPass,
+    );
   }
   if (senderProvider === 'HOSTINGER') {
     const apiConfigured = Boolean(
@@ -1041,15 +1095,16 @@ export function isAdminCampaignSenderConfigured(senderProvider, configuration = 
       && configuration.hostingerMailApiToken !== 'PASTE_HOSTINGER_MAIL_API_TOKEN_HERE'
       && configuration.hostingerMailbox
       && configuration.hostingerMailboxConfigured,
-    );
+    ) && configuration.hostingerMailbox.toLowerCase() === senderAddresses.HOSTINGER;
     const smtpConfigured = Boolean(
       configuration.smtpConfigured
       && configuration.smtpHost
       && configuration.smtpHost.toLowerCase() !== 'smtp.gmail.com'
       && configuration.smtpUser
       && configuration.smtpPass
-      && configuration.hostingerSmtpFrom,
-    );
+      && configuration.hostingerSmtpFrom?.toLowerCase() === senderAddresses.HOSTINGER
+      && configuration.smtpUser.toLowerCase() === senderAddresses.HOSTINGER,
+    ) && senderEmail?.toLowerCase() === senderAddresses.HOSTINGER;
     return apiConfigured || smtpConfigured;
   }
   return false;
@@ -1082,15 +1137,23 @@ export async function sendAdminCampaignEmail({
   recipient,
   recipientName,
   variables = {},
-  senderProvider = 'GMAIL',
+  senderEmail = senderAddresses.GMAIL,
+  senderProvider,
 }) {
-  if (!['GMAIL', 'HOSTINGER'].includes(senderProvider)) {
-    const error = new Error('Choose Hostinger or Gmail as the bulk email sender.');
+  const normalizedSenderEmail = String(senderEmail || '').trim().toLowerCase();
+  const expectedProvider = Object.entries(senderAddresses)
+    .find(([, address]) => address === normalizedSenderEmail)?.[0];
+  if (!expectedProvider || (senderProvider && senderProvider !== expectedProvider)) {
+    const error = new Error('Choose haangoofficial@gmail.com or support@haango.in as the sender address.');
     error.statusCode = 400;
     error.isOperational = true;
     throw error;
   }
-  if (!isAdminCampaignSenderConfigured(senderProvider)) {
+  senderProvider = expectedProvider;
+  if (!['GMAIL', 'HOSTINGER'].includes(senderProvider)) {
+    throw new Error('Unsupported email sender.');
+  }
+  if (!isAdminCampaignSenderConfigured(senderProvider, env, normalizedSenderEmail)) {
     throw getAdminCampaignSenderConfigurationError(senderProvider);
   }
 
@@ -1119,9 +1182,9 @@ export async function sendAdminCampaignEmail({
     } else {
       await sendWithHostingerSmtp({ to: recipient, subject, text, html });
     }
-    return { subject, senderProvider };
+    return { subject, senderProvider, senderEmail: normalizedSenderEmail };
   }
 
   await sendEmail({ to: recipient, subject, text, html, useOfficialSender: true });
-  return { subject, senderProvider };
+  return { subject, senderProvider, senderEmail: normalizedSenderEmail };
 }

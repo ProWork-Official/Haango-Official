@@ -75,7 +75,17 @@ export async function getPlatformActivity(req, res, next) {
 
 export async function trackPageVisit(req, res, next) {
   try {
-    const { page, timeSpent, referrer, visitorId, visitId, landingUrl, pagesVisited, userName } = req.body;
+    const {
+      page,
+      timeSpent,
+      referrer,
+      visitorId,
+      visitId,
+      landingUrl,
+      pagesVisited,
+      userName,
+      campaignAttributionToken,
+    } = req.body;
     if (!visitorId || !page) {
       return res.status(400).json({ success: false, message: 'visitorId and page are required' });
     }
@@ -95,6 +105,7 @@ export async function trackPageVisit(req, res, next) {
       req.get('origin') || '',
       pagesVisited,
       userName || req.user?.name || req.user?.full_name || req.user?.fullName || null,
+      campaignAttributionToken,
     );
 
     res.json(success({ tracked: true }));

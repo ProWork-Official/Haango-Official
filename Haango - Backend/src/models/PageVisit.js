@@ -7,6 +7,7 @@ const pageVisitSchema = new mongoose.Schema(
     visitId: { type: String, index: true },
     page: { type: String, required: true, index: true },
     userName: { type: String, index: true },
+    campaignAttributionToken: { type: String, select: false },
     pagesVisited: [{
       page: { type: String, required: true },
       timestamp: { type: Date, default: Date.now },

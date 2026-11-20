@@ -11,6 +11,7 @@ import { ensureCustomerWallet } from './customerWalletService.js';
 import { redeemCoupon } from './couponService.js';
 import { findAvailableCoupon } from './couponService.js';
 import mongoose from 'mongoose';
+import { removeSignedUpAddress } from './adminEmailListService.js';
 
 function makeReferralCode(name = '') {
   const prefix = String(name).replace(/[^a-z0-9]/gi, '').slice(0, 4).toUpperCase() || 'USER';
@@ -212,6 +213,12 @@ export async function signupUser({ name, email, phone, password, role, otp, sign
     referredBy: referrer?._id || null,
     signupCouponCode: referrer ? '' : normalizedSignupCode,
   });
+  try {
+    await removeSignedUpAddress(finalEmail);
+  } catch {
+    // Do not fail signup; registered-user filtering still prevents future list sends.
+    console.error('Admin email-list cleanup failed after signup.');
+  }
   await ensureCustomerWallet(user._id);
   if (!referrer && normalizedSignupCode) {
     await redeemCoupon(normalizedSignupCode, user, 'SIGNUP');

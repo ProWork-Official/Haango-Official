@@ -45,6 +45,11 @@ export default function DashboardPage({ onNavigate, onSelectBuddy, onMessage, un
   const [editingField, setEditingField] = useState(null);
   const [customerWallet, setCustomerWallet] = useState(null);
   const [referralCopied, setReferralCopied] = useState(false);
+  const [emailSubscribed, setEmailSubscribed] = useState(null);
+  const [emailPreferenceLoading, setEmailPreferenceLoading] = useState(true);
+  const [emailResubscribing, setEmailResubscribing] = useState(false);
+  const [emailPreferenceMessage, setEmailPreferenceMessage] = useState('');
+  const [emailPreferenceError, setEmailPreferenceError] = useState('');
 
   const completion = useMemo(() => {
     const totalSteps = 3;
@@ -115,6 +120,36 @@ export default function DashboardPage({ onNavigate, onSelectBuddy, onMessage, un
       .catch(() => {});
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    apiRequest('/email/preferences')
+      .then((preferences) => { if (active) setEmailSubscribed(Boolean(preferences.subscribed)); })
+      .catch((error) => {
+        if (active) {
+          setEmailSubscribed(false);
+          setEmailPreferenceError(error.message || 'Unable to load your email preference.');
+        }
+      })
+      .finally(() => { if (active) setEmailPreferenceLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  const resubscribeToEmails = async () => {
+    if (emailResubscribing) return;
+    setEmailResubscribing(true);
+    setEmailPreferenceError('');
+    setEmailPreferenceMessage('');
+    try {
+      const preferences = await apiRequest('/email/resubscribe', { method: 'POST' });
+      setEmailSubscribed(Boolean(preferences.subscribed));
+      setEmailPreferenceMessage('You are now subscribed to Haango campaign emails.');
+    } catch (error) {
+      setEmailPreferenceError(error.message || 'Unable to update your email preference.');
+    } finally {
+      setEmailResubscribing(false);
+    }
+  };
 
   const toggleLikedBuddy = async (buddyId) => {
     const result = await apiRequest(`/profile/liked-buddies/${buddyId}/toggle`, { method: 'POST' });
@@ -266,6 +301,29 @@ export default function DashboardPage({ onNavigate, onSelectBuddy, onMessage, un
             <button type="button" onClick={() => onNavigate('/referrals')} className="mt-4 inline-flex items-center gap-2 text-xs font-bold text-coral-600 hover:text-coral-700">View referral activity <ChevronRight size={14} /></button>
           </div>
         </div>
+
+        <section className="card mb-8 flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between" aria-labelledby="email-preferences-heading">
+          <div>
+            <h2 id="email-preferences-heading" className="font-display text-lg font-bold text-ink-900">Email preferences</h2>
+            <p className="mt-1 text-sm text-ink-500">
+              {emailPreferenceLoading
+                ? 'Checking your email subscription...'
+                : emailSubscribed
+                  ? 'You are subscribed to Haango campaign emails.'
+                  : 'You are unsubscribed. Resubscribe to receive Haango campaign emails again.'}
+            </p>
+            {emailPreferenceError && <p className="mt-2 text-sm text-error-600" role="alert">{emailPreferenceError}</p>}
+            {emailPreferenceMessage && <p className="mt-2 text-sm text-emerald-700" role="status">{emailPreferenceMessage}</p>}
+          </div>
+          {!emailSubscribed && <button
+            type="button"
+            onClick={resubscribeToEmails}
+            disabled={emailPreferenceLoading || emailResubscribing}
+            className="btn-primary w-full shrink-0 sm:w-auto disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {emailResubscribing ? 'Updating preference...' : 'Resubscribe to Haango emails'}
+          </button>}
+        </section>
 
         {!isProfileComplete && (
           <div className="mb-8 rounded-3xl border border-amber-100 bg-linear-to-r from-amber-50 to-orange-50 p-5 shadow-soft">

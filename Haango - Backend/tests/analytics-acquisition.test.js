@@ -5,6 +5,7 @@ import PageVisit from '../src/models/PageVisit.js';
 import User from '../src/models/User.js';
 import { countRecordedPageVisits, trackPageVisit } from '../src/services/analyticsService.js';
 import { classifyAcquisitionSource, normalizeReferrerOrigin } from '../src/utils/acquisitionSource.js';
+import { createCampaignAttributionToken } from '../src/utils/campaignAttributionToken.js';
 
 test('classifies direct visits without identifying metadata', () => {
   assert.deepEqual(classifyAcquisitionSource('', '/'), {
@@ -69,6 +70,74 @@ test('updates an existing session visit when a tagged WhatsApp link is opened', 
 
   assert.equal(update.$set.acquisitionSource, 'WHATSAPP');
   assert.equal(update.$set.acquisitionDetail, 'whatsapp');
+});
+
+test('stores only a validated campaign token for an anonymous tracked session', async () => {
+  const originalFindOneAndUpdate = PageVisit.findOneAndUpdate;
+  let update;
+  PageVisit.findOneAndUpdate = async (_filter, updateDocument) => {
+    update = updateDocument;
+  };
+
+  const token = createCampaignAttributionToken('guest@example.com');
+  try {
+    await trackPageVisit(
+      null,
+      'campaign-visitor',
+      '/',
+      0,
+      '',
+      'test-agent',
+      '127.0.0.1',
+      'campaign-visit',
+      '/',
+      'https://haango.in',
+      [],
+      null,
+      token,
+    );
+  } finally {
+    PageVisit.findOneAndUpdate = originalFindOneAndUpdate;
+  }
+
+  assert.equal(update.$set.campaignAttributionToken, token);
+  assert.equal(JSON.stringify(update).includes('guest@example.com'), false);
+});
+
+test('ignores invalid campaign tokens and does not attach them to authenticated visits', async (t) => {
+  const originalFindOneAndUpdate = PageVisit.findOneAndUpdate;
+  let update;
+  t.mock.method(User, 'findById', () => ({
+    select() { return this; },
+    lean() { return Promise.resolve({ name: 'Member' }); },
+  }));
+  t.mock.method(PageVisit, 'updateMany', () => Promise.resolve());
+  PageVisit.findOneAndUpdate = async (_filter, updateDocument) => {
+    update = updateDocument;
+  };
+
+  try {
+    await trackPageVisit(
+      '507f1f77bcf86cd799439011',
+      'member-visitor',
+      '/',
+      0,
+      '',
+      'test-agent',
+      '127.0.0.1',
+      'member-visit',
+      '/',
+      'https://haango.in',
+      [],
+      null,
+      createCampaignAttributionToken('guest@example.com'),
+    );
+  } finally {
+    PageVisit.findOneAndUpdate = originalFindOneAndUpdate;
+  }
+
+  assert.equal(update.$set.campaignAttributionToken, undefined);
+  assert.equal(update.$set.userId, '507f1f77bcf86cd799439011');
 });
 
 test('a later direct page tracking update does not erase an attributed source', async () => {

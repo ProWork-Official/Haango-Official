@@ -24,6 +24,7 @@ import BookingsPage from './Pages/BookingsPage';
 import BuddyBookingsPage from './Pages/BuddyBookingsPage';
 import { AuthProvider, useAuth } from './lib/auth';
 import { apiRequest } from './lib/api';
+import { checkIndiaAvailability } from './lib/siteAccess';
 import { registerPushSubscription, requestBrowserNotificationPermission, triggerBrowserNotification } from './lib/browserNotifications';
 import { shouldTrackPageVisit } from './lib/pageVisitTracking';
 import AdminAllUsersPage from './Pages/AdminAllUsersPage';
@@ -31,6 +32,7 @@ import AdminPlatformActivityPage from './Pages/AdminPlatformActivityPage';
 import AdminAllBuddiesPage from './Pages/AdminAllBuddiesPage';
 import AdminReportsReviewsPage from './Pages/AdminReportsReviewsPage';
 import AdminEmailPage from './Pages/AdminEmailPage';
+import UnsubscribePage from './Pages/UnsubscribePage';
 import AdminWhatsAppPage from './Pages/AdminWhatsAppPage';
 import AdminCouponsPage from './Pages/AdminCouponsPage';
 import AdminSupportRequestsPage from './Pages/AdminSupportRequestsPage';
@@ -43,9 +45,62 @@ import BuddyGuidelinesPage from './Pages/BuddyGuidelinesPage';
 import PrivacyPolicyPage from './Pages/PrivacyPolicyPage';
 import TermsPage from './Pages/TermsPage';
 import CancellationPolicyPage from './Pages/CancellationPolicyPage';
+import IndiaOnlyPage from './Pages/IndiaOnlyPage';
 
 const protectedPaths = ['/dashboard', '/bookings', '/buddy-bookings', '/messages', '/admin', '/buddy-dashboard'];
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5005';
+
+function SiteAccessGate({ children }) {
+  const [status, setStatus] = useState('checking');
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+
+    checkIndiaAvailability()
+      .then((isAvailable) => {
+        if (active) setStatus(isAvailable ? 'allowed' : 'blocked');
+      })
+      .catch(() => {
+        if (active) setStatus('unavailable');
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [attempt]);
+
+  if (status === 'allowed') return children;
+  if (status === 'blocked') return <IndiaOnlyPage />;
+
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-[#fffaf5] px-5 py-12">
+      <section className="w-full max-w-xl rounded-3xl border border-[#eee4d8] bg-white p-8 text-center shadow-sm sm:p-12">
+        <p className="text-sm font-bold uppercase tracking-[0.2em] text-[#ff7418]">Haango</p>
+        <h1 className="mt-5 text-2xl font-extrabold text-ink-900">
+          {status === 'checking' ? 'Checking availability…' : 'Unable to verify your location'}
+        </h1>
+        {status === 'unavailable' && (
+          <>
+            <p className="mt-4 text-base leading-7 text-ink-600">
+              We couldn’t check whether Haango is available in your country. Please try again.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setStatus('checking');
+                setAttempt((current) => current + 1);
+              }}
+              className="mt-6 rounded-full bg-[#ff7418] px-6 py-3 font-semibold text-white transition hover:bg-[#e96510]"
+            >
+              Try again
+            </button>
+          </>
+        )}
+      </section>
+    </main>
+  );
+}
 
 const getRoutePath = (page) => {
   const pathMap = {
@@ -211,7 +266,20 @@ function AppContent() {
     const sessionKey = 'haango_visit_session_id';
     const pagesKey = 'haango_visit_session_pages';
     const pageStartedKey = 'haango_visit_session_page_started_at';
-    const pagePath = `${location.pathname}${location.search}`;
+    const attributionUrl = new URL(window.location.href);
+    const campaignAttributionToken = attributionUrl.searchParams.get('campaign_link') || '';
+    if (campaignAttributionToken) {
+      attributionUrl.searchParams.delete('campaign_link');
+      window.history.replaceState(
+        window.history.state,
+        '',
+        `${attributionUrl.pathname}${attributionUrl.search}${attributionUrl.hash}`,
+      );
+    }
+    const trackedSearch = new URLSearchParams(location.search);
+    trackedSearch.delete('campaign_link');
+    const trackedQuery = trackedSearch.toString();
+    const pagePath = `${location.pathname}${trackedQuery ? `?${trackedQuery}` : ''}`;
 
     if (!visitSessionRef.current) {
       visitSessionRef.current = sessionStorage.getItem(sessionKey)
@@ -266,6 +334,7 @@ function AppContent() {
             timeSpent: pageTimeSpent,
           })),
           userName: profile?.full_name || profile?.name || user?.name || user?.full_name || null,
+          ...(campaignAttributionToken ? { campaignAttributionToken } : {}),
         }),
         keepalive: true,
       }).catch(() => {});
@@ -514,6 +583,7 @@ function AppContent() {
           <Route path="/privacy-policy" element={<PrivacyPolicyPage onNavigate={routeNavigate} />} />
           <Route path="/terms" element={<TermsPage onNavigate={routeNavigate} />} />
           <Route path="/cancellation-policy" element={<CancellationPolicyPage onNavigate={routeNavigate} />} />
+          <Route path="/unsubscribe" element={<UnsubscribePage />} />
 
           <Route path="/admin" element={
             ['ADMIN', 'SUPER_ADMIN', 'MASTER_ADMIN'].includes(profile?.role) ? <AdminPage onNavigate={routeNavigate} /> : <Navigate to="/" replace />
@@ -605,9 +675,11 @@ function AppContent() {
 
 function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <SiteAccessGate>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </SiteAccessGate>
   );
 }
 

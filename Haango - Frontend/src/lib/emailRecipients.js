@@ -2,6 +2,10 @@ const EMAIL_PATTERN = /^[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9](?:[A-Z0-9-]{0,61}
 
 export const MAX_BULK_EMAIL_RECIPIENTS = 100;
 
+function splitRecipientEntries(input) {
+  return input.split(/[,\n;\r\t]+/);
+}
+
 function isValidEmail(email) {
   const [localPart, domain] = email.split('@');
   return email.length <= 254
@@ -16,30 +20,38 @@ function isValidEmail(email) {
 export function parseBulkEmailRecipients(input) {
   const emails = [];
   const seen = new Set();
-  let invalidLine = -1;
+  const skipped = [];
 
-  input.split(/\r?\n/).forEach((entry, index) => {
-    const email = entry.trim().toLowerCase();
-    if (!email) return;
+  const entries = splitRecipientEntries(input);
+  entries.forEach((entry) => {
+    const original = entry.trim().replace(/^["']|["']$/g, '').toLowerCase();
+    const email = original;
+    if (!original) return;
 
     if (!isValidEmail(email)) {
-      if (invalidLine === -1) invalidLine = index + 1;
+      skipped.push({ value: original, reason: 'Invalid email address.' });
       return;
     }
-    if (!seen.has(email)) {
-      seen.add(email);
-      emails.push(email);
+    const domain = email.slice(email.lastIndexOf('@') + 1);
+    if (!['gmail.com', 'googlemail.com'].includes(domain)) {
+      skipped.push({ value: original, reason: 'Not a Gmail address.' });
+      return;
+    }
+    const normalized = `${email.slice(0, email.lastIndexOf('@'))}@gmail.com`;
+    if (!seen.has(normalized)) {
+      seen.add(normalized);
+      emails.push(normalized);
     }
   });
 
   return {
+    rawCount: entries.filter((entry) => entry.trim()).length,
     emails,
-    error: invalidLine !== -1
-      ? `Invalid email address on line ${invalidLine}.`
-      : emails.length === 0
-        ? 'Enter at least one valid email address.'
-        : emails.length > MAX_BULK_EMAIL_RECIPIENTS
-          ? `Enter no more than ${MAX_BULK_EMAIL_RECIPIENTS} unique email addresses.`
-          : '',
+    skipped,
+    error: emails.length === 0
+      ? 'Enter at least one valid Gmail address.'
+      : emails.length > MAX_BULK_EMAIL_RECIPIENTS
+        ? `Enter no more than ${MAX_BULK_EMAIL_RECIPIENTS} unique Gmail addresses.`
+        : '',
   };
 }

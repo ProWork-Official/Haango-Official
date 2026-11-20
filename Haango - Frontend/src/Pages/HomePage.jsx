@@ -94,6 +94,23 @@ const moodCards = [
   },
 ];
 
+const serviceCities = [
+  'Mumbai',
+  'Delhi / Delhi NCR',
+  'Bengaluru',
+  'Hyderabad',
+  'Chennai',
+  'Kolkata',
+  'Pune',
+  'Ahmedabad',
+  'Prayagraj',
+  'Lucknow',
+  'Kanpur',
+];
+
+const homePageTitle = "Find a Verified Buddy in India's Major Cities | Haango";
+const homePageDescription = 'Find a verified buddy for coffee, movies and outings in Mumbai, Delhi NCR, Bengaluru, Hyderabad, Chennai, Kolkata, Pune, Ahmedabad, Prayagraj, Lucknow or Kanpur.';
+
 const trustItems = [
   { icon: BadgeCheck, label: 'Identity verified' },
   { icon: LockKeyhole, label: 'Secure booking' },
@@ -144,6 +161,28 @@ function HomePage({ onNavigate, onSelectActivity, onSelectBuddy }) {
   const [liveFeaturedBuddies, setLiveFeaturedBuddies] = useState([]);
   const [loadingFeaturedBuddies, setLoadingFeaturedBuddies] = useState(true);
   const [likedBuddyIds, setLikedBuddyIds] = useState([]);
+
+  useEffect(() => {
+    document.title = homePageTitle;
+
+    const metaTags = [
+      { attribute: 'name', key: 'description', content: homePageDescription },
+      { attribute: 'property', key: 'og:title', content: homePageTitle },
+      { attribute: 'property', key: 'og:description', content: homePageDescription },
+      { attribute: 'name', key: 'twitter:title', content: homePageTitle },
+      { attribute: 'name', key: 'twitter:description', content: homePageDescription },
+    ];
+
+    metaTags.forEach(({ attribute, key, content }) => {
+      let tag = document.head.querySelector(`meta[${attribute}="${key}"]`);
+      if (!tag) {
+        tag = document.createElement('meta');
+        tag.setAttribute(attribute, key);
+        document.head.appendChild(tag);
+      }
+      tag.setAttribute('content', content);
+    });
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -234,24 +273,19 @@ function HomePage({ onNavigate, onSelectActivity, onSelectBuddy }) {
           size={14}
           className="fill-[#ff7a18] text-[#ff7a18]"
         />
-        Now live in Prayagraj
+        Now live in 11 cities and metro areas
       </div>
 
       <h1 className="Lato font-display text-[2rem] font-extrabold leading-[1.04] tracking-[-0.04em] text-[#102038] sm:text-5xl lg:text-[3rem]">
-        Plans are better
-        <br />
-        when you have
-        <br />
-        <span className="text-[#f26d21] BackBones tracking-wider">someone to </span>
-        <span className="text-[#3c70d9] BackBones tracking-wider">Haango.</span>
+        Find a verified buddy for your next plan.
       </h1>
 
       <p className="mt-6 max-w-md text-base leading-relaxed text-[#425066] sm:text-lg">
-        Find a verified buddy for movies, shopping, coffee, dinner,
-        events and more — Safe. Simple. Social.
+        Find a verified buddy for movies, shopping, coffee, dinner, events and
+        more — safe, simple and social.
       </p>
-      <p className=" max-w-md text-base leading-relaxed text-[#425066] sm:text-lg">
-       
+      <p className="mt-2 max-w-md text-sm leading-relaxed text-[#607089]">
+        Plans are better when you have someone to Haango.
       </p>
 
       <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -259,7 +293,7 @@ function HomePage({ onNavigate, onSelectActivity, onSelectBuddy }) {
           onClick={() => onNavigate('explore')}
           className="group inline-flex items-center justify-center gap-3 rounded-full bg-[#ff7418] px-7 py-4 font-display text-sm font-bold text-white shadow-[0_12px_28px_rgba(255,116,24,0.25)] transition-all hover:-translate-y-0.5 hover:bg-[#ed5c07]"
         >
-          Find a Campanion
+          Find a Buddy
           <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/20 transition-transform group-hover:translate-x-1">
             <ArrowRight size={17} />
           </span>
@@ -386,6 +420,25 @@ function HomePage({ onNavigate, onSelectActivity, onSelectBuddy }) {
   </div>
 </section>
 
+      <section className="bg-white py-10 sm:py-12" aria-labelledby="service-cities-heading">
+        <div className="container-max section-pad">
+          <div className="mx-auto max-w-3xl text-center">
+            <h2 id="service-cities-heading" className="Lato text-3xl font-extrabold tracking-tight sm:text-4xl">
+              Find a Haango buddy in your city
+            </h2>
+            <p className="mt-3 text-base text-[#607089]">
+              Haango is currently available in these cities and metro areas.
+            </p>
+          </div>
+          <ul className="mt-6 flex flex-wrap justify-center gap-3">
+            {serviceCities.map((city) => (
+              <li key={city} className="rounded-full bg-[#fff0e3] px-4 py-2 text-sm font-semibold text-[#9b4b12]">
+                {city}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
 
       {/* ===== WHAT ARE YOU UP TO ===== */}
       <section className="container-max section-pad py-8 sm:py-10">

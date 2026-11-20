@@ -3,6 +3,7 @@ import User from '../models/User.js';
 import { notFound } from '../utils/errors.js';
 import { classifyAcquisitionSource, normalizeReferrerOrigin } from '../utils/acquisitionSource.js';
 import { lookupIpLocation } from './ipGeolocationService.js';
+import { getEmailFromCampaignAttributionToken } from '../utils/campaignAttributionToken.js';
 
 export function resolveVisitorDisplayName(userName, userRecord) {
   if (typeof userName === 'string' && userName.trim()) return userName.trim();
@@ -17,7 +18,21 @@ function enrichVisitLocation(ipAddress, visitFilter) {
     .catch(() => {});
 }
 
-export async function trackPageVisit(userId, visitorId, page, timeSpent, referrer, userAgent, ipAddress, visitId, landingUrl, siteOrigin, pagesVisited = [], userName = null) {
+export async function trackPageVisit(
+  userId,
+  visitorId,
+  page,
+  timeSpent,
+  referrer,
+  userAgent,
+  ipAddress,
+  visitId,
+  landingUrl,
+  siteOrigin,
+  pagesVisited = [],
+  userName = null,
+  campaignAttributionToken = null,
+) {
   try {
     let resolvedUserName = resolveVisitorDisplayName(userName, null);
     if (!resolvedUserName && userId) {
@@ -26,6 +41,12 @@ export async function trackPageVisit(userId, visitorId, page, timeSpent, referre
     }
 
     const acquisition = classifyAcquisitionSource(referrer, landingUrl, siteOrigin);
+    const validCampaignToken = !userId && typeof campaignAttributionToken === 'string'
+      ? campaignAttributionToken.trim()
+      : '';
+    const campaignEmail = validCampaignToken
+      ? getEmailFromCampaignAttributionToken(validCampaignToken)
+      : null;
     const safeReferrer = normalizeReferrerOrigin(referrer);
     const now = new Date();
     const normalizedPages = Array.isArray(pagesVisited) ? pagesVisited.map((item) => ({
@@ -62,6 +83,7 @@ export async function trackPageVisit(userId, visitorId, page, timeSpent, referre
           timestamp: now,
         },
       };
+      if (campaignEmail) update.$set.campaignAttributionToken = validCampaignToken;
       if (acquisition.acquisitionSource !== 'DIRECT') {
         update.$set.acquisitionSource = acquisition.acquisitionSource;
         update.$set.acquisitionDetail = acquisition.acquisitionDetail;
@@ -88,6 +110,7 @@ export async function trackPageVisit(userId, visitorId, page, timeSpent, referre
       referrer: safeReferrer,
       acquisitionSource: acquisition.acquisitionSource,
       acquisitionDetail: acquisition.acquisitionDetail,
+      ...(campaignEmail ? { campaignAttributionToken: validCampaignToken } : {}),
       userAgent,
       ipAddress,
     });
@@ -198,7 +221,7 @@ export async function getPlatformActivity(days = 30, dateRange = null) {
       { $limit: 10 },
     ]),
     PageVisit.find(match)
-      .select('page timeSpent timestamp userId userName visitorId visitId lastSeenAt pagesVisited referrer acquisitionSource acquisitionDetail location')
+      .select('page timeSpent timestamp userId userName visitorId visitId lastSeenAt pagesVisited referrer acquisitionSource acquisitionDetail location +campaignAttributionToken')
       .sort({ lastSeenAt: -1, timestamp: -1 })
       .lean(),
   ]);
@@ -239,6 +262,9 @@ export async function getPlatformActivity(days = 30, dateRange = null) {
         ? { acquisitionSource: visit.acquisitionSource, acquisitionDetail: visit.acquisitionDetail || '' }
         : classifyAcquisitionSource(visit.referrer);
       const resolvedUserName = resolveVisitorDisplayName(visit.userName, { name: userNameMap.get(String(visit.userId)) || undefined, fullName: userNameMap.get(String(visit.userId)) || undefined });
+      const campaignAttributionEmail = visit.userId
+        ? null
+        : getEmailFromCampaignAttributionToken(visit.campaignAttributionToken);
       return {
         id: String(visit._id),
         page: visit.page,
@@ -255,6 +281,7 @@ export async function getPlatformActivity(days = 30, dateRange = null) {
         userName: resolvedUserName,
         displayName: resolvedUserName || (visit.userId ? 'Signed in user' : 'Guest visitor'),
         visitorType: visit.userId ? 'SIGNED_IN' : 'GUEST',
+        ...(campaignAttributionEmail ? { campaignAttributionEmail } : {}),
         source: acquisition.acquisitionSource,
         sourceDetail: acquisition.acquisitionDetail,
         location: [visit.location?.city, visit.location?.region, visit.location?.country].filter(Boolean).join(', '),

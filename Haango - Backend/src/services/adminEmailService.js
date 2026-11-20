@@ -1,15 +1,31 @@
 import Booking from '../models/Booking.js';
 import BuddyProfile from '../models/BuddyProfile.js';
 import User from '../models/User.js';
+import EmailUnsubscribe from '../models/EmailUnsubscribe.js';
+import AdminEmailList from '../models/AdminEmailList.js';
+import {
+  completeSavedListCampaignHistory,
+  createSavedListCampaignHistory,
+} from './adminEmailCampaignHistoryService.js';
 import {
   getAdminCampaignTemplates,
   isAdminCampaignSenderConfigured,
   previewAdminCampaignEmail,
   sendAdminCampaignEmail,
 } from './emailService.js';
-import { parseBulkEmailRecipients } from '../utils/emailRecipientList.js';
+import {
+  MAX_BULK_EMAIL_RECIPIENTS,
+  parseBulkEmailRecipientDetails,
+} from '../utils/emailRecipientList.js';
+import { createEmailUnsubscribeToken } from '../utils/emailUnsubscribeToken.js';
+import { createCampaignAttributionToken } from '../utils/campaignAttributionToken.js';
+import { env } from '../config/environment.js';
 
 const allowedMilestones = new Set([5, 10, 18]);
+export const ADMIN_CAMPAIGN_SENDERS = Object.freeze({
+  'haangoofficial@gmail.com': 'GMAIL',
+  'support@haango.in': 'HOSTINGER',
+});
 
 function requestError(message, statusCode = 400) {
   const error = new Error(message);
@@ -22,6 +38,19 @@ function getTemplate(templateId) {
   const template = getAdminCampaignTemplates().find((item) => item.id === templateId);
   if (!template) throw requestError('Select a valid email template.');
   return template;
+}
+
+function normalizeGmailAlias(email) {
+  return String(email || '').trim().toLowerCase().replace(/@googlemail\.com$/, '@gmail.com');
+}
+
+function emailLookupVariants(emails) {
+  return [...new Set(emails.flatMap((email) => {
+    const normalized = normalizeGmailAlias(email);
+    return normalized.endsWith('@gmail.com')
+      ? [normalized, normalized.replace(/@gmail\.com$/, '@googlemail.com')]
+      : [normalized];
+  }))];
 }
 
 export function previewCampaign({ templateId, promoCode, milestone, creditAmount }) {
@@ -110,6 +139,21 @@ export async function resolveCampaignRecipients(template, recipientMode, email, 
   throw requestError('Choose a recipient option available for this topic.');
 }
 
+export async function getEmailUnsubscribes(page = 1, limit = 50) {
+  const filter = { optedOutAt: { $ne: null } };
+  const skip = (page - 1) * limit;
+  const [unsubscribes, total] = await Promise.all([
+    EmailUnsubscribe.find(filter)
+      .select('email optedOutAt')
+      .sort({ optedOutAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    EmailUnsubscribe.countDocuments(filter),
+  ]);
+  return { unsubscribes, total };
+}
+
 export async function sendCampaignToRecipients({
   recipients,
   templateId,
@@ -117,6 +161,7 @@ export async function sendCampaignToRecipients({
   promoExpiry,
   milestone,
   creditAmount,
+  senderEmail,
   sender = sendAdminCampaignEmail,
 }) {
   const uniqueRecipients = [...new Map(recipients
@@ -137,7 +182,10 @@ export async function sendCampaignToRecipients({
           milestone: Number(milestone),
           creditAmount,
           referralCode: recipient.referralCode,
+          unsubscribeUrl: `${env.clientUrl.replace(/\/$/, '')}/unsubscribe#token=${encodeURIComponent(createEmailUnsubscribeToken(recipient.email))}`,
+          campaignAttributionToken: createCampaignAttributionToken(recipient.email),
         },
+        senderEmail,
       });
       sent += 1;
     } catch {
@@ -157,24 +205,56 @@ export async function sendCampaign({
   promoExpiry,
   milestone,
   creditAmount,
+  senderEmail,
   senderProvider,
+  recipientListId,
   sender = sendAdminCampaignEmail,
 }) {
   const template = getTemplate(templateId);
   let bulkEmails = null;
+  let selectedEmailList = null;
+  let skippedInvalidEmails = [];
+  let selectedSenderEmail;
   let selectedSenderProvider;
-  if (recipientMode === 'BULK') {
-    selectedSenderProvider = String(senderProvider || 'GMAIL').trim().toUpperCase();
-    if (!['HOSTINGER', 'GMAIL'].includes(selectedSenderProvider)) {
-      throw requestError('Choose Hostinger or Gmail as the bulk email sender.');
-    }
-    try {
-      bulkEmails = parseBulkEmailRecipients(recipientEmails);
-    } catch (error) {
-      throw requestError(error.message);
-    }
+  const legacySender = String(senderProvider || '').trim().toUpperCase();
+  if (senderProvider && !['HOSTINGER', 'GMAIL'].includes(legacySender)) {
+    throw requestError('Choose haangoofficial@gmail.com or support@haango.in as the sender address.');
+  }
+  if (senderEmail !== undefined) {
+    selectedSenderEmail = String(senderEmail).trim().toLowerCase();
+  } else if (legacySender === 'HOSTINGER' && recipientMode === 'BULK') {
+    selectedSenderEmail = 'support@haango.in';
   } else {
-    selectedSenderProvider = 'GMAIL';
+    selectedSenderEmail = 'haangoofficial@gmail.com';
+  }
+  selectedSenderProvider = ADMIN_CAMPAIGN_SENDERS[selectedSenderEmail];
+  if (!selectedSenderProvider || (senderEmail !== undefined && senderProvider
+    && legacySender !== selectedSenderProvider)) {
+    throw requestError('Choose haangoofficial@gmail.com or support@haango.in as the sender address.');
+  }
+  if (recipientMode === 'BULK') {
+    if (recipientListId) {
+      try {
+        selectedEmailList = await AdminEmailList.findById(recipientListId).lean();
+      } catch {
+        throw requestError('Choose a valid saved recipient list.');
+      }
+      if (!selectedEmailList || selectedEmailList.isDeleted) throw requestError('The selected recipient list no longer exists.');
+      bulkEmails = selectedEmailList.emails;
+    } else {
+      let parsed;
+      try {
+        parsed = parseBulkEmailRecipientDetails(recipientEmails);
+      } catch (error) {
+        throw requestError(error.message);
+      }
+      bulkEmails = parsed.emails;
+      skippedInvalidEmails = parsed.skipped;
+    }
+    if (bulkEmails.length === 0) throw requestError('Choose a list or enter at least one valid Gmail address.');
+    if (bulkEmails.length > MAX_BULK_EMAIL_RECIPIENTS) {
+      throw requestError(`Enter no more than ${MAX_BULK_EMAIL_RECIPIENTS} unique Gmail addresses.`);
+    }
   }
   if (sender === sendAdminCampaignEmail && !isAdminCampaignSenderConfigured(selectedSenderProvider)) {
     const message = selectedSenderProvider === 'HOSTINGER'
@@ -196,11 +276,11 @@ export async function sendCampaign({
   let skippedEmails = [];
   let deliveryRecipients = recipients;
   if (recipientMode === 'BULK') {
-    const existingUsers = await User.find({ email: { $in: bulkEmails } })
+    const existingUsers = await User.find({ email: { $in: emailLookupVariants(bulkEmails) } })
       .select('email')
       .lean();
     const existingEmails = new Set(existingUsers
-      .map((user) => String(user.email || '').trim().toLowerCase())
+      .map((user) => normalizeGmailAlias(user.email))
       .filter(Boolean));
     skippedEmails = bulkEmails.filter((recipientEmail) => existingEmails.has(recipientEmail));
     deliveryRecipients = recipients.filter((recipient) => !existingEmails.has(
@@ -208,17 +288,68 @@ export async function sendCampaign({
     ));
   }
 
-  const result = await sendCampaignToRecipients({
-    recipients: deliveryRecipients,
-    templateId,
-    promoCode,
-    promoExpiry,
-    milestone,
-    creditAmount,
-    sender: (message) => sender({
-      ...message,
-      senderProvider: recipientMode === 'BULK' ? selectedSenderProvider : undefined,
-    }),
-  });
-  return { ...result, skippedEmails, senderProvider: selectedSenderProvider };
+  const recipientEmailsToCheck = [...new Set(recipients
+    .map((recipient) => String(recipient.email || '').trim().toLowerCase())
+    .filter(Boolean))];
+  const optedOutRecords = recipientEmailsToCheck.length
+    ? await EmailUnsubscribe.find({
+      email: { $in: emailLookupVariants(recipientEmailsToCheck) },
+      optedOutAt: { $ne: null },
+    }).select('email').lean()
+    : [];
+  const optedOutSet = new Set(optedOutRecords.map((record) => normalizeGmailAlias(record.email)));
+  const optedOutEmails = recipientEmailsToCheck.filter((address) => optedOutSet.has(address));
+  deliveryRecipients = deliveryRecipients.filter((recipient) => !optedOutSet.has(
+    String(recipient.email || '').trim().toLowerCase(),
+  ));
+
+  const history = selectedEmailList
+    ? await createSavedListCampaignHistory({
+      list: selectedEmailList,
+      template,
+      senderEmail: selectedSenderEmail,
+      totalRecipients: bulkEmails.length,
+      attemptedRecipients: deliveryRecipients.length,
+      skipped: bulkEmails.length - deliveryRecipients.length,
+    })
+    : null;
+  let result;
+  try {
+    result = await sendCampaignToRecipients({
+      recipients: deliveryRecipients,
+      templateId,
+      promoCode,
+      promoExpiry,
+      milestone,
+      creditAmount,
+      senderEmail: selectedSenderEmail,
+      sender: (message) => sender({
+        ...message,
+        senderProvider: selectedSenderProvider,
+      }),
+    });
+  } catch (error) {
+    if (history) {
+      await completeSavedListCampaignHistory(history._id, {
+        sent: 0,
+        failed: deliveryRecipients.length,
+        status: 'FAILED',
+      }).catch(() => {});
+    }
+    throw error;
+  }
+  if (history) {
+    await completeSavedListCampaignHistory(history._id, {
+      sent: result.sent,
+      failed: result.failed,
+    });
+  }
+  return {
+    ...result,
+    skippedEmails,
+    optedOutEmails,
+    skippedInvalidEmails,
+    senderEmail: selectedSenderEmail,
+    senderProvider: selectedSenderProvider,
+  };
 }

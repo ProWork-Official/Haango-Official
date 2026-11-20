@@ -5,6 +5,8 @@ import User from '../models/User.js';
 import * as reviewService from '../services/reviewService.js';
 import * as bookingService from '../services/bookingService.js';
 import * as adminEmailService from '../services/adminEmailService.js';
+import * as adminEmailListService from '../services/adminEmailListService.js';
+import * as adminEmailCampaignHistoryService from '../services/adminEmailCampaignHistoryService.js';
 import * as adminWhatsAppService from '../services/adminWhatsAppService.js';
 import * as walletService from '../services/walletService.js';
 import * as referralService from '../services/referralService.js';
@@ -302,6 +304,77 @@ export async function previewEmailCampaign(req, res, next) {
 export async function sendEmailCampaign(req, res, next) {
   try {
     res.json(success(await adminEmailService.sendCampaign(req.body || {})));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getEmailUnsubscribes(req, res, next) {
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const { unsubscribes, total } = await adminEmailService.getEmailUnsubscribes(page, limit);
+    res.json(paginated(unsubscribes, buildPagination(page, limit, total)));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getEmailCampaignHistory(req, res, next) {
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const { entries, total } = await adminEmailCampaignHistoryService.getCampaignHistory({
+      page,
+      limit,
+      date: req.query.date || 'ALL',
+      from: req.query.from,
+      to: req.query.to,
+    });
+    res.json(paginated(entries, buildPagination(page, limit, total)));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getEmailLists(_req, res, next) {
+  try {
+    res.json(success(await adminEmailListService.getLists()));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function createEmailList(req, res, next) {
+  try {
+    res.status(201).json(success(await adminEmailListService.createList(req.body?.emails, req.body?.name)));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateEmailList(req, res, next) {
+  try {
+    res.json(success(await adminEmailListService.updateList(req.params.id, req.body?.emails, req.body?.name)));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function deleteEmailList(req, res, next) {
+  try {
+    res.json(success(await adminEmailListService.deleteList(req.params.id)));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getEmailListSignupAudit(req, res, next) {
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const { entries, total } = await adminEmailListService.getSignupAudit(page, limit);
+    res.json(paginated(entries, buildPagination(page, limit, total)));
   } catch (err) {
     next(err);
   }

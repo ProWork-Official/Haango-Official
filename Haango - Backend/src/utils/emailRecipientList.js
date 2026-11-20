@@ -1,6 +1,7 @@
 const EMAIL_PATTERN = /^[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?(?:\.[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?)+$/i;
 
 export const MAX_BULK_EMAIL_RECIPIENTS = 100;
+const GMAIL_DOMAINS = new Set(['gmail.com', 'googlemail.com']);
 
 function isValidEmailAddress(value) {
   if (value.length > 254) return false;
@@ -16,35 +17,51 @@ function isValidEmailAddress(value) {
   );
 }
 
-export function parseBulkEmailRecipients(input) {
+function getEntries(input) {
   const entries = typeof input === 'string'
-    ? input.split(/\r?\n/)
+    ? input.split(/[,\n;\r\t]+/)
     : Array.isArray(input) ? input : null;
 
   if (!entries) throw new Error('Enter email addresses, one per line.');
+  return entries;
+}
 
+export function parseBulkEmailRecipientDetails(input) {
   const emails = [];
   const seen = new Set();
+  const skipped = [];
 
-  entries.forEach((entry, index) => {
+  getEntries(input).forEach((entry, index) => {
     if (typeof entry !== 'string') {
-      throw new Error(`Invalid email address on line ${index + 1}.`);
+      skipped.push({ value: String(entry ?? ''), reason: 'Invalid email address.' });
+      return;
     }
-    const email = entry.trim().toLowerCase();
-    if (!email) return;
-    if (!isValidEmailAddress(email)) {
-      throw new Error(`Invalid email address on line ${index + 1}.`);
+    const original = entry.trim().replace(/^["']|["']$/g, '').toLowerCase();
+    if (!original) return;
+    if (!isValidEmailAddress(original)) {
+      skipped.push({ value: original, reason: 'Invalid email address.' });
+      return;
     }
+    const domain = original.slice(original.lastIndexOf('@') + 1);
+    if (!GMAIL_DOMAINS.has(domain)) {
+      skipped.push({ value: original, reason: 'Not a Gmail address.' });
+      return;
+    }
+    const email = `${original.slice(0, original.lastIndexOf('@'))}@gmail.com`;
     if (!seen.has(email)) {
       seen.add(email);
       emails.push(email);
     }
   });
 
-  if (emails.length === 0) throw new Error('Enter at least one valid email address.');
-  if (emails.length > MAX_BULK_EMAIL_RECIPIENTS) {
-    throw new Error(`Enter no more than ${MAX_BULK_EMAIL_RECIPIENTS} unique email addresses.`);
-  }
+  return { emails, skipped };
+}
 
+export function parseBulkEmailRecipients(input) {
+  const { emails } = parseBulkEmailRecipientDetails(input);
+  if (emails.length === 0) throw new Error('Enter at least one valid Gmail address.');
+  if (emails.length > MAX_BULK_EMAIL_RECIPIENTS) {
+    throw new Error(`Enter no more than ${MAX_BULK_EMAIL_RECIPIENTS} unique Gmail addresses.`);
+  }
   return emails;
 }

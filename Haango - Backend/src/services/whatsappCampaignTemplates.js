@@ -29,6 +29,41 @@ const templates = [
       callButton('Call Support'),
     ],
   },
+
+  {
+  id: 'haango_diwali_buddy_referral',
+  name: 'haango_diwali_buddy_referral',
+  title: 'Diwali Buddy Referral Offer',
+  category: 'Buddy offer',
+  message: `DIWALI DHAMAKA WITH HAANGO!
+
+BUDDY, GET ₹300 FREE THIS DIWALI!
+
+This Diwali, turn your referrals into rewards!
+
+Earn ₹25 in your Buddy wallet for every friend who joins Haango as a Buddy and completes their Buddy profile.
+
+How to earn:
+
+1.) Open your Haango dashboard and share your referral code: (Example - USEREDE3C393)
+
+2.) Ask your friends to enter your referral code while signing up as Buddies.
+
+3.) Once they complete their Buddy profiles, earn ₹25 per eligible referral!
+
+Refer 12 friends = ₹300 FREE!
+
+Share the joy. Invite your friends. Earn festive rewards!
+
+Limited-period Diwali offer. T&C apply.
+
+Reply STOP to opt out.`,
+  buttons: [
+    { type: 'URL', text: 'Refer a Friend', url: 'https://haango.in/signup' },
+    { type: 'URL', text: 'Explore Haango', url: 'https://haango.in/explore' },
+    callButton('Call Support'),
+  ],
+},
   {
     id: 'haango_buddy_recruitment',
     name: 'haango_buddy_recruitment',

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { isPublicIp, lookupIpLocation, normalizeLocation } from '../src/services/ipGeolocationService.js';
+import { isIndiaCountry } from '../src/services/siteAccessService.js';
 import '../src/services/analyticsService.js';
 
 test('rejects local, private, and reserved IP addresses', () => {
@@ -22,6 +23,13 @@ test('normalizes provider results to city, region, and country only', () => {
     longitude: 72.8777,
   }), { city: 'Mumbai', region: 'Maharashtra', country: 'India' });
   assert.equal(normalizeLocation({ success: false }), null);
+});
+
+test('allows only India country names, ignoring surrounding whitespace and case', () => {
+  assert.equal(isIndiaCountry('India'), true);
+  assert.equal(isIndiaCountry(' india '), true);
+  assert.equal(isIndiaCountry('United States'), false);
+  assert.equal(isIndiaCountry(null), false);
 });
 
 test('does not call the provider for a private IP', async () => {

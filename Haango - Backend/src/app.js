@@ -26,6 +26,8 @@ import customerWalletRoutes from './routes/customerWalletRoutes.js';
 import couponRoutes from './routes/couponRoutes.js';
 import blockRoutes from './routes/blockRoutes.js';
 import analyticsRoutes from './routes/analyticsRoutes.js';
+import emailRoutes from './routes/emailRoutes.js';
+import siteAccessRoutes from './routes/siteAccessRoutes.js';
 import * as walletController from './controllers/walletController.js';
 import { requireAuth, requireAdmin } from './middleware/auth.js';
 import { getDbStatus } from './config/database.js';
@@ -95,6 +97,8 @@ app.get('/', (_req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/email', emailRoutes);
+app.use('/api/site-access', siteAccessRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/buddies', buddyRoutes);
 app.use('/api/activities', activityRoutes);

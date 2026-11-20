@@ -23,6 +23,7 @@ export const env = {
   mongodbUri: process.env.MONGODB_URI || '',
 
   jwtSecret: process.env.JWT_SECRET || 'dev-secret-change-in-production',
+  emailUnsubscribeSecret: process.env.EMAIL_UNSUBSCRIBE_SECRET || process.env.JWT_SECRET || 'dev-secret-change-in-production',
   refreshTokenSecret: process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET || 'dev-refresh-secret-change-in-production',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '15m',
   refreshTokenExpiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN || '30d',

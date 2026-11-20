@@ -467,6 +467,7 @@ export default function AdminPlatformActivityPage({ onNavigate }) {
           pagesVisited: [],
           visitorId: visit?.visitorId,
           userName: visit?.userName,
+          campaignAttributionEmail: visit?.visitorType === 'SIGNED_IN' ? null : visit?.campaignAttributionEmail || null,
         });
       }
 
@@ -614,7 +615,10 @@ export default function AdminPlatformActivityPage({ onNavigate }) {
                       {liveVisitDetails.map((visit) => (
                         <div key={visit.id || `${visit.page}-${visit.lastSeenAt || visit.timestamp}`} className="rounded-lg border border-[#edf1f7] bg-[#fafcff] px-2.5 py-2">
                           <div className="flex items-center justify-between gap-2">
-                            <p className="truncate text-xs font-semibold text-ink-800">{visit.displayName || visit.userName || 'Guest visitor'}</p>
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-semibold text-ink-800">{visit.displayName || visit.userName || 'Guest visitor'}</p>
+                              {visit.visitorType !== 'SIGNED_IN' && visit.campaignAttributionEmail && <p className="truncate text-[10px] text-ink-500">{visit.campaignAttributionEmail}</p>}
+                            </div>
                             <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${visit.visitorType === 'SIGNED_IN' ? 'bg-blue-50 text-blue-700' : 'bg-emerald-50 text-emerald-700'}`}>
                               {visit.visitorType === 'SIGNED_IN' ? 'Signed in' : 'Guest'}
                             </span>
@@ -701,7 +705,10 @@ export default function AdminPlatformActivityPage({ onNavigate }) {
                         </td>
                         <td className="whitespace-nowrap px-3 py-3">
                           <div className="flex flex-col gap-1">
-                            <span className={`inline-flex w-fit rounded-full px-2 py-1 text-xs font-semibold ${visit.visitorType === 'SIGNED_IN' ? 'bg-orange-100 text-[#e95718]' : 'bg-blue-50 text-blue-700'}`}>{visit.displayName || visit.userName || 'Guest visitor'}</span>
+                            <div className="flex flex-col items-start gap-1">
+                              <span className={`inline-flex w-fit rounded-full px-2 py-1 text-xs font-semibold ${visit.visitorType === 'SIGNED_IN' ? 'bg-orange-100 text-[#e95718]' : 'bg-blue-50 text-blue-700'}`}>{visit.displayName || visit.userName || 'Guest visitor'}</span>
+                              {visit.visitorType !== 'SIGNED_IN' && visit.campaignAttributionEmail && <span className="max-w-52 truncate text-[10px] text-ink-500">{visit.campaignAttributionEmail}</span>}
+                            </div>
                             {/* <span className={`inline-flex w-fit rounded-full px-2 py-1 text-[10px] font-bold ${visit.visitorType === 'SIGNED_IN' ? 'bg-blue-50 text-blue-700' : 'bg-emerald-50 text-emerald-700'}`}>{visit.visitorType === 'SIGNED_IN' ? 'Signed in' : 'Guest'}</span> */}
                           </div>
                         </td>

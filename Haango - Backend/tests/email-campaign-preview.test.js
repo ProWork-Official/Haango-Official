@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import User from '../src/models/User.js';
+import EmailUnsubscribe from '../src/models/EmailUnsubscribe.js';
 
 import { getAdminCampaignTemplates, previewAdminCampaignEmail } from '../src/services/emailService.js';
-import { previewCampaign, sendCampaign } from '../src/services/adminEmailService.js';
+import { previewCampaign, sendCampaign, sendCampaignToRecipients } from '../src/services/adminEmailService.js';
+import { getEmailFromCampaignAttributionToken } from '../src/utils/campaignAttributionToken.js';
 
 test('campaign preview uses the same promo copy, subject, and HTML format as delivery', () => {
   const preview = previewCampaign({ templateId: 'customer_promo', promoCode: 'SAVE25' });
@@ -17,6 +19,9 @@ test('campaign preview uses the same promo copy, subject, and HTML format as del
   assert.match(preview.html, /Claim your ₹100 credit/);
   assert.match(preview.html, /src="data:image\/png;base64,[A-Za-z0-9+/=]+"/);
   assert.doesNotMatch(preview.html, /src="cid:haango-logo"/);
+  assert.match(preview.text, /Unsubscribe from Haango campaign emails:/);
+  assert.match(preview.html, />Unsubscribe<\/a>/);
+  assert.match(preview.html, /href="http:\/\/localhost:5173\/unsubscribe"/);
 });
 
 test('campaign preview includes both customer signup callouts', () => {
@@ -45,6 +50,9 @@ test('wallet credit campaign preview defaults the credit amount to ₹100', () =
 });
 
 test('wallet credit campaign sends the configured amount to the email template', async (t) => {
+  t.mock.method(EmailUnsubscribe, 'find', () => ({
+    select: () => ({ lean: async () => [] }),
+  }));
   t.mock.method(User, 'find', () => ({
     select: () => ({ lean: async () => [] }),
   }));
@@ -52,12 +60,13 @@ test('wallet credit campaign sends the configured amount to the email template',
   await sendCampaign({
     templateId: 'customer_wallet_credit',
     recipientMode: 'BULK',
-    recipientEmails: ['customer@example.com'],
+    recipientEmails: ['customer@gmail.com'],
     creditAmount: 250,
     sender: async (message) => { sentMessage = message; },
   });
 
   assert.equal(sentMessage.variables.creditAmount, 250);
+  assert.match(sentMessage.variables.unsubscribeUrl, /\/unsubscribe#token=[A-Za-z0-9_.-]+$/);
 });
 
 test('campaign preview reflects the selected milestone in both subject and body', () => {
@@ -75,7 +84,7 @@ test('all campaign CTA links identify Gmail and preserve referral query paramete
       templateId: id,
       referralCode: id === 'buddy_referral_bonus' ? 'BUDDY123' : undefined,
     });
-    const ctaUrl = new URL(preview.text.match(/https?:\/\/\S+/g).at(-1));
+    const ctaUrl = new URL(preview.text.match(/https?:\/\/\S+/g).find((url) => url.includes('utm_source=gmail')));
 
     assert.equal(ctaUrl.searchParams.get('utm_source'), 'gmail', `${id} text CTA`);
     assert.match(preview.html, /utm_source=gmail/, `${id} HTML CTA`);
@@ -83,6 +92,27 @@ test('all campaign CTA links identify Gmail and preserve referral query paramete
       assert.equal(ctaUrl.searchParams.get('signupCode'), 'BUDDY123');
     }
   }
+});
+
+test('delivered campaign CTA carries an opaque recipient token in its website link', async () => {
+  let sentMessage;
+  await sendCampaignToRecipients({
+    recipients: [{ email: 'guest@example.com', name: 'Guest' }],
+    templateId: 'customer_promo',
+    sender: async (message) => { sentMessage = message; },
+  });
+
+  const token = sentMessage.variables.campaignAttributionToken;
+  const preview = previewAdminCampaignEmail({
+    templateId: 'customer_promo',
+    campaignAttributionToken: token,
+  });
+  const ctaUrl = new URL(preview.text.match(/https?:\/\/\S+/g).find((url) => url.includes('campaign_link=')));
+
+  assert.equal(getEmailFromCampaignAttributionToken(ctaUrl.searchParams.get('campaign_link')), 'guest@example.com');
+  assert.doesNotMatch(ctaUrl.toString(), /guest@example\.com/);
+  assert.match(preview.html, /campaign_link=/);
+  assert.equal(ctaUrl.searchParams.get('utm_source'), 'gmail');
 });
 
 test('campaign preview rejects unknown template identifiers', () => {
