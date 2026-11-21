@@ -7,11 +7,13 @@
 @font-face {
   font-family: BackBones-Font;
   src: url(../src/Assets/Font/black_bones/BlackBones.ttf);
+  font-display: swap;
 }
 
 @font-face {
   font-family: Lato-Font;
   src: url(../src/Assets/Font/lato/Lato-Heavy.ttf);
+  font-display: swap;
 }
 
 

@@ -14,6 +14,7 @@ import {
 import StarRating from '../Components/StarRating';
 import { ProfileSkeleton } from '../Components/Skeletons';
 import { apiRequest as sharedApiRequest } from '../lib/api';
+import { createBreadcrumbStructuredData, createBuddyProfilePath, setPageSeo } from '../lib/seo';
 
 function getAgeFromDate(dateValue) {
   if (!dateValue) return 0;
@@ -79,6 +80,35 @@ export default function ProfilePage({
         };
 
         setBuddy(normalizedBuddy);
+        const title = `${normalizedBuddy.name}${normalizedBuddy.location !== 'Unknown' ? ` in ${normalizedBuddy.location}` : ''} | Verified Haango Buddy`;
+        const description = `${normalizedBuddy.name} is a verified Haango buddy${normalizedBuddy.location !== 'Unknown' ? ` in ${normalizedBuddy.location}` : ''}. ${normalizedBuddy.tagline}`;
+        const canonicalPath = createBuddyProfilePath(normalizedBuddy);
+        setPageSeo({
+          title,
+          description,
+          canonicalPath,
+          image: normalizedBuddy.image,
+          robots: 'index,follow',
+          structuredData: [{
+            '@context': 'https://schema.org',
+            '@type': 'Person',
+            name: normalizedBuddy.name,
+            description,
+            image: normalizedBuddy.image || undefined,
+            address: normalizedBuddy.location !== 'Unknown' ? {
+              '@type': 'PostalAddress',
+              addressLocality: normalizedBuddy.location,
+              addressCountry: 'IN',
+            } : undefined,
+            url: `https://haango.in${canonicalPath}`,
+          }, createBreadcrumbStructuredData(canonicalPath, { buddies: 'Buddies' })],
+        });
+        if (window.location.pathname === '/profile' || (
+          window.location.pathname.startsWith('/buddies/')
+          && window.location.pathname !== canonicalPath
+        )) {
+          window.history.replaceState(window.history.state, '', canonicalPath);
+        }
         try {
           const reviewOwnerId = buddyData.userId?._id || buddyData.userId || buddyData.user?._id || buddyId;
           const reviewsResponse = await sharedApiRequest(`/reviews/buddy/${reviewOwnerId}?limit=50&minRating=${reviewFilter}`);

@@ -1,9 +1,19 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, ImagePlus, Newspaper, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Heading2, ImagePlus, Newspaper, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import AdminLayout from '../Components/AdminLayout';
 
-const emptyDraft = { title: '', body: '', image: '' };
+const emptyDraft = {
+  title: '',
+  subtitle: '',
+  slug: '',
+  metaTitle: '',
+  metaDescription: '',
+  introduction: '',
+  body: '',
+  image: '',
+  contentBlocks: [],
+};
 const maxImageLength = 2_000_000;
 
 const formatCreatedAt = (value) => new Intl.DateTimeFormat(undefined, {
@@ -92,6 +102,50 @@ export default function AdminBlogsPage({ onNavigate }) {
     }
   };
 
+  const addTextBlock = () => {
+    setDraft((current) => ({
+      ...current,
+      contentBlocks: [...current.contentBlocks, { type: 'text', text: '', alt: '', level: 2, image: '' }],
+    }));
+  };
+
+  const addHeadingBlock = () => {
+    setDraft((current) => ({
+      ...current,
+      contentBlocks: [...current.contentBlocks, { type: 'heading', text: '', alt: '', level: 2, image: '' }],
+    }));
+  };
+
+  const addImageBlock = () => {
+    setDraft((current) => ({
+      ...current,
+      contentBlocks: [...current.contentBlocks, { type: 'image', text: '', alt: '', level: 2, image: '' }],
+    }));
+  };
+
+  const updateBlock = (index, patch) => {
+    setDraft((current) => ({
+      ...current,
+      contentBlocks: current.contentBlocks.map((block, blockIndex) => (
+        blockIndex === index ? { ...block, ...patch } : block
+      )),
+    }));
+  };
+
+  const chooseInlineImage = async (event, index) => {
+    const [file] = Array.from(event.target.files || []);
+    if (!file) return;
+    try {
+      const image = await compressImage(file);
+      updateBlock(index, { image });
+      setError('');
+    } catch (imageError) {
+      setError(imageError.message || 'Unable to process image.');
+    } finally {
+      event.target.value = '';
+    }
+  };
+
   const saveBlog = async (event) => {
     event.preventDefault();
     setError('');
@@ -102,10 +156,25 @@ export default function AdminBlogsPage({ onNavigate }) {
 
     setSaving(true);
     try {
+      const textBody = [
+        draft.introduction,
+        ...draft.contentBlocks
+          .filter((block) => block.type !== 'image')
+          .map((block) => block.text),
+      ].filter(Boolean).join('\n\n');
+      const payload = {
+        ...draft,
+        body: textBody || draft.body,
+        slug: draft.slug || draft.title
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '')
+          .slice(0, 180),
+      };
       const path = editingId ? `/admin/blogs/${editingId}` : '/admin/blogs';
       await apiRequest(path, {
         method: editingId ? 'PUT' : 'POST',
-        body: JSON.stringify(draft),
+        body: JSON.stringify(payload),
       });
       resetDraft();
       await loadBlogs();
@@ -117,7 +186,17 @@ export default function AdminBlogsPage({ onNavigate }) {
   };
 
   const editBlog = (blog) => {
-    setDraft({ title: blog.title, body: blog.body, image: blog.image });
+    setDraft({
+      title: blog.title || '',
+      subtitle: blog.subtitle || '',
+      slug: blog.slug || '',
+      metaTitle: blog.metaTitle || '',
+      metaDescription: blog.metaDescription || '',
+      introduction: blog.introduction || '',
+      body: blog.body || '',
+      image: blog.image || '',
+      contentBlocks: Array.isArray(blog.contentBlocks) ? blog.contentBlocks : [],
+    });
     setEditingId(blog._id);
     setError('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -152,9 +231,63 @@ export default function AdminBlogsPage({ onNavigate }) {
           <label className="block text-sm font-medium text-ink-700">Title
             <input className="input-field mt-1" value={draft.title} maxLength={160} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Give your post a title" required />
           </label>
-          <label className="block text-sm font-medium text-ink-700">Body / text
-            <textarea className="input-field mt-1 min-h-56 resize-y" value={draft.body} maxLength={50000} onChange={(event) => setDraft((current) => ({ ...current, body: event.target.value }))} placeholder="Write your blog post..." required />
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="block text-sm font-medium text-ink-700">Subtitle
+              <input className="input-field mt-1" value={draft.subtitle} maxLength={300} onChange={(event) => setDraft((current) => ({ ...current, subtitle: event.target.value }))} placeholder="A short introduction shown below the title" />
+            </label>
+            <label className="block text-sm font-medium text-ink-700">URL slug
+              <input className="input-field mt-1" value={draft.slug} maxLength={180} onChange={(event) => setDraft((current) => ({ ...current, slug: event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') }))} placeholder="how-to-find-travel-companion-india" />
+            </label>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="block text-sm font-medium text-ink-700">SEO meta title
+              <input className="input-field mt-1" value={draft.metaTitle} maxLength={160} onChange={(event) => setDraft((current) => ({ ...current, metaTitle: event.target.value }))} placeholder="How to Find a Travel Companion in India | Haango" />
+            </label>
+            <label className="block text-sm font-medium text-ink-700">SEO meta description
+              <textarea className="input-field mt-1 min-h-20 resize-y" value={draft.metaDescription} maxLength={320} onChange={(event) => setDraft((current) => ({ ...current, metaDescription: event.target.value }))} placeholder="A useful 150-160 character search description..." />
+            </label>
+          </div>
+          <label className="block text-sm font-medium text-ink-700">Introduction
+            <textarea className="input-field mt-1 min-h-28 resize-y" value={draft.introduction} maxLength={5000} onChange={(event) => setDraft((current) => ({ ...current, introduction: event.target.value }))} placeholder="Write the opening paragraph..." />
           </label>
+          <div className="rounded-2xl border border-ink-100 p-4 sm:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div><p className="text-sm font-bold text-ink-800">Article content</p><p className="mt-1 text-xs text-ink-500">Add headings, paragraphs, and feature images in any order.</p></div>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={addHeadingBlock} className="btn-ghost text-xs"><Heading2 size={15} /> Add heading</button>
+                <button type="button" onClick={addTextBlock} className="btn-ghost text-xs"><Plus size={15} /> Add text</button>
+                <button type="button" onClick={addImageBlock} className="btn-ghost text-xs"><ImagePlus size={15} /> Add image</button>
+              </div>
+            </div>
+            <div className="mt-5 space-y-4">
+              {draft.contentBlocks.length === 0 && (
+                <label className="block text-sm font-medium text-ink-700">Plain text content
+                  <textarea className="input-field mt-1 min-h-56 resize-y" value={draft.body} maxLength={50000} onChange={(event) => setDraft((current) => ({ ...current, body: event.target.value }))} placeholder="Write your blog post. Use the content blocks above to add headings and inline images." />
+                </label>
+              )}
+              {draft.contentBlocks.map((block, index) => (
+                <div key={index} className="rounded-xl border border-ink-100 bg-ink-50/30 p-3 sm:p-4">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <p className="text-xs font-bold uppercase tracking-wider text-ink-500">{block.type === 'heading' ? 'Heading' : block.type === 'image' ? 'Inline image' : 'Text paragraph'}</p>
+                    <button type="button" onClick={() => setDraft((current) => ({ ...current, contentBlocks: current.contentBlocks.filter((_, blockIndex) => blockIndex !== index) }))} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-500 hover:bg-red-50 hover:text-red-600" aria-label="Remove content block"><Trash2 size={15} /></button>
+                  </div>
+                  {block.type === 'heading' && (
+                    <input className="input-field" value={block.text} maxLength={200} onChange={(event) => updateBlock(index, { text: event.target.value })} placeholder="Section heading" />
+                  )}
+                  {block.type === 'text' && (
+                    <textarea className="input-field min-h-32 resize-y" value={block.text} maxLength={12000} onChange={(event) => updateBlock(index, { text: event.target.value })} placeholder="Write this paragraph..." />
+                  )}
+                  {block.type === 'image' && (
+                    <div>
+                      <label className="btn-ghost inline-flex cursor-pointer items-center gap-2"><ImagePlus size={16} /> {block.image ? 'Change inline image' : 'Choose inline image'}<input type="file" accept="image/*" onChange={(event) => chooseInlineImage(event, index)} className="hidden" /></label>
+                      {block.image && <img src={block.image} alt={block.alt || 'Inline blog content'} className="mt-3 max-h-72 w-full rounded-xl object-cover" />}
+                      <input className="input-field mt-3" value={block.alt} maxLength={240} onChange={(event) => updateBlock(index, { alt: event.target.value })} placeholder="Image alt text (describe the image)" />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
           <div>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div><p className="text-sm font-medium text-ink-700">Image</p><p className="mt-1 text-xs text-ink-500">Choose an image; it will be optimized before saving.</p></div>

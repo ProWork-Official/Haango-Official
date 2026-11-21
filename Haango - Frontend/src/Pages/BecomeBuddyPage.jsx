@@ -13,7 +13,7 @@ export default function BecomeBuddyPage({ onNavigate }) {
         <div className="absolute inset-0">
           <img
             src="https://images.pexels.com/photos/5319301/pexels-photo-5319301.jpeg?auto=compress&cs=tinysrgb&w=1920"
-            alt="Friends celebrating together"
+            alt="Travel buddy meeting new people and enjoying a shared experience"
             className="w-full h-full object-cover"
           />
           <div className="absolute inset-0 bg-black/70" />
@@ -33,10 +33,10 @@ export default function BecomeBuddyPage({ onNavigate }) {
               className="font-display font-extrabold text-4xl sm:text-5xl lg:text-6xl text-white leading-[1.05] tracking-tight text-balance animate-fade-up"
               style={{ animationDelay: '80ms' }}
             >
-              Your Time. Your Schedule.
+              Become a travel buddy in India.
               <br />
               <span className="bg-gradient-to-r from-coral-400 to-coral-500 bg-clip-text text-[#FF7C5D]">
-                Your Haango Companion Journey.
+                Your time. Your schedule. Your Haango journey.
               </span>
             </h1>
 

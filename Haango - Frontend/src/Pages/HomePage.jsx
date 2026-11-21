@@ -24,9 +24,10 @@ import {
 
 import BuddyCard from '../Components/BuddyCard';
 import { apiRequest } from '../lib/api';
-import HeroImage from '../Assets/HeroImageTrans.png';
+import HeroImage from '../Assets/HeroImageTrans.webp';
 import Playb from '../Assets/Icon/play.png';
 import FAQSection from '../Components/FAQ';
+import { SEO_PAGES, setPageSeo } from '../lib/seo';
 const moodCards = [
   {
     id: 'movie',
@@ -108,9 +109,6 @@ const serviceCities = [
   'Kanpur',
 ];
 
-const homePageTitle = "Find a Verified Buddy in India's Major Cities | Haango";
-const homePageDescription = 'Find a verified buddy for coffee, movies and outings in Mumbai, Delhi NCR, Bengaluru, Hyderabad, Chennai, Kolkata, Pune, Ahmedabad, Prayagraj, Lucknow or Kanpur.';
-
 const trustItems = [
   { icon: BadgeCheck, label: 'Identity verified' },
   { icon: LockKeyhole, label: 'Secure booking' },
@@ -163,25 +161,7 @@ function HomePage({ onNavigate, onSelectActivity, onSelectBuddy }) {
   const [likedBuddyIds, setLikedBuddyIds] = useState([]);
 
   useEffect(() => {
-    document.title = homePageTitle;
-
-    const metaTags = [
-      { attribute: 'name', key: 'description', content: homePageDescription },
-      { attribute: 'property', key: 'og:title', content: homePageTitle },
-      { attribute: 'property', key: 'og:description', content: homePageDescription },
-      { attribute: 'name', key: 'twitter:title', content: homePageTitle },
-      { attribute: 'name', key: 'twitter:description', content: homePageDescription },
-    ];
-
-    metaTags.forEach(({ attribute, key, content }) => {
-      let tag = document.head.querySelector(`meta[${attribute}="${key}"]`);
-      if (!tag) {
-        tag = document.createElement('meta');
-        tag.setAttribute(attribute, key);
-        document.head.appendChild(tag);
-      }
-      tag.setAttribute('content', content);
-    });
+    setPageSeo({ ...SEO_PAGES['/'], canonicalPath: '/' });
   }, []);
 
   useEffect(() => {
@@ -277,7 +257,7 @@ function HomePage({ onNavigate, onSelectActivity, onSelectBuddy }) {
       </div>
 
       <h1 className="Lato font-display text-[2rem] font-extrabold leading-[1.04] tracking-[-0.04em] text-[#102038] sm:text-5xl lg:text-[3rem]">
-        Find a verified buddy for your next plan.
+        Find a verified travel companion in India for your next plan.
       </h1>
 
       <p className="mt-6 max-w-md text-base leading-relaxed text-[#425066] sm:text-lg">
@@ -304,7 +284,7 @@ function HomePage({ onNavigate, onSelectActivity, onSelectBuddy }) {
           className="inline-flex items-center justify-center gap-2.5 rounded-full border-2 border-[#4d79d8] px-7 py-3.5 font-display text-sm font-bold  transition-all hover:bg-[#edf3ff]"
         >
           How it works
-          <img src={Playb} alt="play" className="w-[26px] h-[26px]" /> 
+          <img src={Playb}           alt="Learn how Haango works" className="w-[26px] h-[26px]" />
         </button>
       </div>
 
@@ -348,6 +328,10 @@ function HomePage({ onNavigate, onSelectActivity, onSelectBuddy }) {
     src={HeroImage}
     alt="Friends enjoying a casual hangout at a café"
     className="block h-auto w-full object-cover"
+    width="960"
+    height="720"
+    fetchPriority="high"
+    decoding="async"
   />
 
   {/* Floating cards */}
@@ -530,7 +514,7 @@ function HomePage({ onNavigate, onSelectActivity, onSelectBuddy }) {
                   onLike={toggleLike}
                   onClick={() => {
                     onSelectBuddy(buddy.id);
-                    onNavigate('profile');
+                    onNavigate(`/buddies/${encodeURIComponent(buddy.id)}`);
                   }}
                 />
               ))}

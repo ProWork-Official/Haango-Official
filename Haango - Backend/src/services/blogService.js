@@ -12,12 +12,21 @@ export async function listBlogs() {
 }
 
 export async function getBlog(id) {
-  const blog = await findBlogById(id);
+  const blog = mongoose.Types.ObjectId.isValid(id)
+    ? await findBlogById(id)
+    : await Blog.findOne({ slug: id });
   if (!blog) throw notFound('Blog post not found');
   return blog;
 }
 
 export async function createBlog(fields) {
+  if (!fields.slug) {
+    fields.slug = String(fields.title)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 180);
+  }
   return Blog.create(fields);
 }
 

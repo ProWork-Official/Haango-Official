@@ -5,6 +5,7 @@ import {
   Heart,
   Share2,
 } from 'lucide-react';
+import { createBuddyProfilePath } from '../lib/seo';
 
 export default function BuddyCard({
   buddy,
@@ -15,8 +16,7 @@ export default function BuddyCard({
 }) {
   const shareBuddy = async (event) => {
     event.stopPropagation();
-    const shareUrl = new URL('/profile', window.location.origin);
-    shareUrl.searchParams.set('buddyId', buddy.id);
+    const shareUrl = new URL(createBuddyProfilePath(buddy), window.location.origin);
     shareUrl.searchParams.set('utm_source', 'haango_share');
     shareUrl.searchParams.set('utm_medium', 'share');
     const shareData = {

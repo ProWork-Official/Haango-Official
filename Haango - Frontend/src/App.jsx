@@ -1,52 +1,54 @@
-import { useState, useEffect, useRef } from 'react';
-import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { lazy, Suspense, useState, useEffect, useRef } from 'react';
+import { Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import Navbar from './Components/Navbar';
 import BottomNav from './Components/BottomNav';
 import Footer from './Components/Footer';
-import HomePage from './Pages/HomePage';
-import ExplorePage from './Pages/ExplorePage';
-import ProfilePage from './Pages/ProfilePage';
-import BookingPage from './Pages/BookingPage';
-import MessagesPage from './Pages/MessagesPage';
-import DashboardPage from './Pages/DashboardPage';
-import ReferralsPage from './Pages/ReferralsPage';
-import AdminPage from './Pages/AdminPage';
 import FAQSection from './Components/FAQ';
-import AuthPage from './Pages/AuthPage';
-import ExperiencePage from './Pages/ExperiencePage';
-import HowItWorksPage from './Pages/HowItWorksPage';
-import SafetyPage from './Pages/SafetyPage';
-import AboutPage from './Pages/AboutPage';
-import BecomeBuddyPage from './Pages/BecomeBuddyPage';
-import BuddyDashboardPage from './Pages/BuddyDashboardPage';
-import BookingsPage from './Pages/BookingsPage';
-import BuddyBookingsPage from './Pages/BuddyBookingsPage';
 import { AuthProvider, useAuth } from './lib/auth';
 import { apiRequest } from './lib/api';
 import { registerPushSubscription, requestBrowserNotificationPermission, triggerBrowserNotification } from './lib/browserNotifications';
 import { shouldTrackPageVisit } from './lib/pageVisitTracking';
-import AdminAllUsersPage from './Pages/AdminAllUsersPage';
-import AdminPlatformActivityPage from './Pages/AdminPlatformActivityPage';
-import AdminAllBuddiesPage from './Pages/AdminAllBuddiesPage';
-import AdminReportsReviewsPage from './Pages/AdminReportsReviewsPage';
-import AdminEmailPage from './Pages/AdminEmailPage';
-import UnsubscribePage from './Pages/UnsubscribePage';
-import AdminWhatsAppPage from './Pages/AdminWhatsAppPage';
-import AdminCouponsPage from './Pages/AdminCouponsPage';
-import AdminSupportRequestsPage from './Pages/AdminSupportRequestsPage';
-import AdminBookingsPage from './Pages/AdminBookingsPage';
-import AdminAdministratorsPage from './Pages/AdminAdministratorsPage';
-import ContactPage from './Pages/ContactPage';
-import SupportPage from './Pages/SupportPage';
-import CommunityGuidelinesPage from './Pages/CommunityGuidelinesPage';
-import BuddyGuidelinesPage from './Pages/BuddyGuidelinesPage';
-import PrivacyPolicyPage from './Pages/PrivacyPolicyPage';
-import TermsPage from './Pages/TermsPage';
-import CancellationPolicyPage from './Pages/CancellationPolicyPage';
-import BlogPage from './Pages/BlogPage';
-import AdminBlogsPage from './Pages/AdminBlogsPage';
-import NotFoundPage from './Pages/NotFoundPage';
+import { createBreadcrumbStructuredData, extractIdFromSeoParam, SEO_PAGES, setPageSeo } from './lib/seo';
+
+const HomePage = lazy(() => import('./Pages/HomePage'));
+const ExplorePage = lazy(() => import('./Pages/ExplorePage'));
+const ProfilePage = lazy(() => import('./Pages/ProfilePage'));
+const BookingPage = lazy(() => import('./Pages/BookingPage'));
+const MessagesPage = lazy(() => import('./Pages/MessagesPage'));
+const DashboardPage = lazy(() => import('./Pages/DashboardPage'));
+const ReferralsPage = lazy(() => import('./Pages/ReferralsPage'));
+const AdminPage = lazy(() => import('./Pages/AdminPage'));
+const AuthPage = lazy(() => import('./Pages/AuthPage'));
+const ExperiencePage = lazy(() => import('./Pages/ExperiencePage'));
+const HowItWorksPage = lazy(() => import('./Pages/HowItWorksPage'));
+const SafetyPage = lazy(() => import('./Pages/SafetyPage'));
+const AboutPage = lazy(() => import('./Pages/AboutPage'));
+const BecomeBuddyPage = lazy(() => import('./Pages/BecomeBuddyPage'));
+const BuddyDashboardPage = lazy(() => import('./Pages/BuddyDashboardPage'));
+const BookingsPage = lazy(() => import('./Pages/BookingsPage'));
+const BuddyBookingsPage = lazy(() => import('./Pages/BuddyBookingsPage'));
+const AdminAllUsersPage = lazy(() => import('./Pages/AdminAllUsersPage'));
+const AdminPlatformActivityPage = lazy(() => import('./Pages/AdminPlatformActivityPage'));
+const AdminAllBuddiesPage = lazy(() => import('./Pages/AdminAllBuddiesPage'));
+const AdminReportsReviewsPage = lazy(() => import('./Pages/AdminReportsReviewsPage'));
+const AdminEmailPage = lazy(() => import('./Pages/AdminEmailPage'));
+const UnsubscribePage = lazy(() => import('./Pages/UnsubscribePage'));
+const AdminWhatsAppPage = lazy(() => import('./Pages/AdminWhatsAppPage'));
+const AdminCouponsPage = lazy(() => import('./Pages/AdminCouponsPage'));
+const AdminSupportRequestsPage = lazy(() => import('./Pages/AdminSupportRequestsPage'));
+const AdminBookingsPage = lazy(() => import('./Pages/AdminBookingsPage'));
+const AdminAdministratorsPage = lazy(() => import('./Pages/AdminAdministratorsPage'));
+const ContactPage = lazy(() => import('./Pages/ContactPage'));
+const SupportPage = lazy(() => import('./Pages/SupportPage'));
+const CommunityGuidelinesPage = lazy(() => import('./Pages/CommunityGuidelinesPage'));
+const BuddyGuidelinesPage = lazy(() => import('./Pages/BuddyGuidelinesPage'));
+const PrivacyPolicyPage = lazy(() => import('./Pages/PrivacyPolicyPage'));
+const TermsPage = lazy(() => import('./Pages/TermsPage'));
+const CancellationPolicyPage = lazy(() => import('./Pages/CancellationPolicyPage'));
+const BlogPage = lazy(() => import('./Pages/BlogPage'));
+const AdminBlogsPage = lazy(() => import('./Pages/AdminBlogsPage'));
+const NotFoundPage = lazy(() => import('./Pages/NotFoundPage'));
 
 const protectedPaths = ['/dashboard', '/bookings', '/buddy-bookings', '/messages', '/admin', '/buddy-dashboard', '/referrals'];
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5005';
@@ -113,6 +115,27 @@ const getPageKeyFromPath = (pathname) => {
   if (pathname.startsWith('/cancellation-policy')) return 'cancellation-policy';
   return 'home';
 };
+
+function BuddyProfileRoute({
+  selectedBuddy,
+  prevPage,
+  routeNavigate,
+  startBooking,
+  startConversation,
+}) {
+  const { buddyParam } = useParams();
+  const buddyId = extractIdFromSeoParam(buddyParam) || selectedBuddy;
+  if (!buddyId) return <Navigate to="/explore" replace />;
+  return (
+    <ProfilePage
+      buddyId={buddyId}
+      onNavigate={routeNavigate}
+      onBack={() => routeNavigate(prevPage || '/')}
+      onBook={startBooking}
+      onMessage={startConversation}
+    />
+  );
+}
 
 function AppContent() {
   const { user, profile, loading, signOut } = useAuth();
@@ -331,6 +354,61 @@ function AppContent() {
   }, [location.pathname, location.search, profile?.full_name, profile?.name, user?.name, user?.full_name]);
 
   const currentPage = getPageKeyFromPath(location.pathname);
+  useEffect(() => {
+    const matchedSeo = Object.entries(SEO_PAGES).find(([path]) =>
+      path === '/' ? location.pathname === '/' : location.pathname === path,
+    )?.[1];
+
+    if (matchedSeo) {
+      setPageSeo({
+        ...matchedSeo,
+        canonicalPath: location.pathname,
+        structuredData: createBreadcrumbStructuredData(location.pathname, {
+          experience: 'Experiences',
+          'how-it-works': 'How It Works',
+          'become-buddy': 'Become a Buddy',
+          'community-guidelines': 'Community Guidelines',
+          'buddy-guidelines': 'Buddy Guidelines',
+          'privacy-policy': 'Privacy Policy',
+          'cancellation-policy': 'Cancellation Policy',
+        }),
+      });
+    } else if (location.pathname.startsWith('/blog/')) {
+      setPageSeo({
+        title: 'Haango Blog | Haango',
+        description: 'Read the latest article from the Haango community.',
+        canonicalPath: location.pathname,
+        structuredData: createBreadcrumbStructuredData(location.pathname, { blog: 'Blog' }),
+      });
+    } else if (location.pathname.startsWith('/buddies/') || location.pathname === '/profile') {
+      setPageSeo({
+        title: 'Verified Buddy Profiles | Haango',
+        description: 'Discover verified Haango buddies and find a companion for your next local outing.',
+        robots: 'index,follow',
+        canonicalPath: location.pathname,
+        structuredData: createBreadcrumbStructuredData(location.pathname, { buddies: 'Buddies' }),
+      });
+    } else if (protectedPaths.some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`))
+      || ['/login', '/signup', '/unsubscribe'].includes(location.pathname)
+      || location.pathname.startsWith('/admin')) {
+      setPageSeo({ title: 'Haango', robots: 'noindex,nofollow', canonicalPath: location.pathname });
+    } else {
+      setPageSeo({
+        title: 'Page Not Found | Haango',
+        description: 'The page you requested could not be found.',
+        canonicalPath: location.pathname,
+        robots: 'noindex,nofollow',
+      });
+    }
+
+    window.dataLayer = window.dataLayer || [];
+    window.dataLayer.push({
+      event: 'page_view',
+      page_path: `${location.pathname}${location.search}`,
+      page_location: window.location.href,
+      page_title: document.title,
+    });
+  }, [location.pathname, location.search]);
 
   const routeNavigate = (next) => {
     const raw = typeof next === 'string' ? next : 'home';
@@ -431,6 +509,7 @@ function AppContent() {
       />}
 
       <main>
+        <Suspense fallback={<div className="flex min-h-[50vh] items-center justify-center" aria-label="Loading page"><div className="h-8 w-8 animate-spin rounded-full border-2 border-[#ece3d8] border-t-[#ff7418]" /></div>}>
         <Routes>
           <Route path="/" element={
             <>
@@ -447,8 +526,18 @@ function AppContent() {
               initialActivity={selectedActivity}
               onSelectBuddy={(id) => {
                 selectBuddy(id);
-                routeNavigate('/profile');
+                routeNavigate(`/buddies/${encodeURIComponent(id)}`);
               }}
+            />
+          } />
+
+          <Route path="/buddies/:buddyParam" element={
+            <BuddyProfileRoute
+              selectedBuddy={selectedBuddy}
+              prevPage={prevPage}
+              routeNavigate={routeNavigate}
+              startBooking={startBooking}
+              startConversation={startConversation}
             />
           } />
 
@@ -501,7 +590,7 @@ function AppContent() {
                 unreadCount={messageUnreadCount}
                 onSelectBuddy={(id) => {
                   selectBuddy(id);
-                  routeNavigate('/profile');
+                  routeNavigate(`/buddies/${encodeURIComponent(id)}`);
                 }}
               />
             ) : (
@@ -626,6 +715,7 @@ function AppContent() {
 
           <Route path="*" element={<NotFoundPage onNavigate={routeNavigate} />} />
         </Routes>
+        </Suspense>
       </main>
 
       {showFooter && !isAdminWorkspace && <Footer onNavigate={routeNavigate} />}

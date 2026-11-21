@@ -1,0 +1,41 @@
+RewriteEngine On
+
+RewriteCond %{HTTPS} !=on [OR]
+RewriteCond %{HTTP_HOST} ^www\.haango\.in$ [NC]
+RewriteRule ^ https://haango.in%{REQUEST_URI} [R=301,L,NE]
+
+RewriteRule ^index\.html$ / [R=301,L]
+RewriteCond %{THE_REQUEST} \s/+[^\s?]+\.seo\.html(?:[?\s]|$) [NC]
+RewriteRule ^(.+)\.seo\.html$ /$1 [R=301,L,NE]
+RewriteRule ^(.+)/$ /$1 [R=301,L,NE]
+
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+RewriteRule ^$ index.html [L]
+RewriteRule ^(explore|experience|how-it-works|safety|about|become-buddy|faq|contact|support|community-guidelines|buddy-guidelines|privacy-policy|terms|cancellation-policy|blog)$ $1.seo.html [L]
+RewriteRule ^(profile|booking|messages|dashboard|referrals|bookings|buddy-bookings|buddy-dashboard|unsubscribe|login|signup)$ $1.seo.html [L]
+RewriteRule ^admin(?:/.*)?$ admin.seo.html [L]
+RewriteRule ^(blog/.*|buddies/.*)$ index.html [L]
+
+ErrorDocument 404 /404.html
+
+<IfModule mod_headers.c>
+  <FilesMatch "\.(js|css|woff|woff2|ttf|svg|png|jpg|jpeg|webp|avif)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+
+  <FilesMatch "\.(html|xml|txt)$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+
+  <Files "404.html">
+    Header set X-Robots-Tag "noindex, nofollow"
+  </Files>
+</IfModule>
+
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css application/javascript application/json image/svg+xml
+</IfModule>
+

@@ -44,7 +44,7 @@ export default function HowItWorksPage({ onNavigate }) {
       <section className="container-max section-pad">
         <p className="text-xs font-semibold uppercase tracking-[0.25em] text-coral-500">How it works</p>
         <h1 className="mt-4 font-display text-4xl font-extrabold text-ink-900 sm:text-5xl">
-          Two simple paths, one safer experience.
+          How to find a travel companion on Haango
         </h1>
       </section>
 

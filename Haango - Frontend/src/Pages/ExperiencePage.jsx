@@ -30,7 +30,7 @@ export default function ExperiencePage({ onNavigate }) {
         <div className="max-w-3xl">
           <p className="text-xs font-semibold uppercase tracking-[0.25em] text-coral-500">Experience</p>
           <h1 className="mt-4 font-display text-4xl font-extrabold text-ink-900 sm:text-5xl">
-            Create moments that feel easy and memorable.
+            Experiences and activities with a verified travel companion
           </h1>
           <p className="mt-4 text-lg text-ink-600">
             Haango is built for meaningful, low-pressure companionship. You can book a companion for a few hours or a planned outing, based on the vibe you want and the experience you are looking for.
@@ -39,6 +39,7 @@ export default function ExperiencePage({ onNavigate }) {
       </section>
 
       <section className="container-max section-pad pt-0">
+        <h2 className="mb-6 font-display text-3xl font-extrabold text-ink-900">Choose your next shared experience</h2>
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
           {experienceCards.map(({ icon: Icon, title, description }) => (
             <div key={title} className="card p-6">
