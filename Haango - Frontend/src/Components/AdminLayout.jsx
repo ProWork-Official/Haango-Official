@@ -1,4 +1,4 @@
-import { Activity, AlertCircle, BadgeCheck, Calendar, Check, ClipboardList, Headset, IndianRupee, LayoutDashboard, Mail, MessageCircle, MessageSquareText, Shield, Ticket, Users } from 'lucide-react';
+import { Activity, AlertCircle, BadgeCheck, Calendar, Check, ClipboardList, Headset, IndianRupee, LayoutDashboard, Mail, MessageCircle, MessageSquareText, Newspaper, Shield, Ticket, Users } from 'lucide-react';
 
 const navigationItems = [
   { id: 'dashboard', label: 'Dashboard', path: '/admin', Icon: LayoutDashboard },
@@ -15,6 +15,7 @@ const navigationItems = [
   { id: 'platform-revenue', label: 'Platform revenue', path: '/admin#admin-metrics', Icon: Activity },
   { id: 'haango-earnings', label: 'Haango earnings', path: '/admin#admin-metrics', Icon: ClipboardList },
   { id: 'coupons', label: 'Manage coupons', path: '/admin/coupons', Icon: Ticket },
+  { id: 'blogs', label: 'Manage blogs', path: '/admin/blogs', Icon: Newspaper },
   { id: 'support', label: 'Support tickets', path: '/admin/support-requests', Icon: Headset },
   { id: 'administrators', label: 'Admin accounts', path: '/admin/administrators', Icon: Shield },
 ];

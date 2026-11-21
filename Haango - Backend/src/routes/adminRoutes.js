@@ -4,6 +4,8 @@ import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { handleValidationErrors } from '../middleware/validate.js';
 import { adminBuddyUpdateValidator } from '../validators/index.js';
 import * as couponController from '../controllers/couponController.js';
+import * as blogController from '../controllers/blogController.js';
+import { createBlogValidator, updateBlogValidator } from '../validators/blogValidators.js';
 
 const router = Router();
 
@@ -53,5 +55,9 @@ router.get('/whatsapp-campaigns/status', adminController.getWhatsAppCampaignStat
 router.get('/coupons', couponController.list);
 router.post('/coupons', couponController.create);
 router.delete('/coupons/:id', couponController.remove);
+router.get('/blogs', blogController.listBlogs);
+router.post('/blogs', createBlogValidator, handleValidationErrors, blogController.createBlog);
+router.put('/blogs/:id', updateBlogValidator, handleValidationErrors, blogController.updateBlog);
+router.delete('/blogs/:id', blogController.deleteBlog);
 
 export default router;

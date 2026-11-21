@@ -12,7 +12,7 @@ import Logo from './Logo';
 const primaryNav = [
   { id: 'explore', label: 'Find Companions' },
   { id: 'become-buddy', label: 'Become a Companion' },
-  { id: 'experience', label: 'Experience' },
+  { id: 'blog', label: 'Blog' },
 ];
 
 const secondaryNav = [
@@ -215,6 +215,18 @@ export default function Navbar({
                   />
                 </button>
               ))}
+
+              <button
+                onClick={() => handleNav('experience')}
+                className={`no-tap flex items-center justify-between rounded-2xl px-4 py-4 font-display text-base font-bold transition-all ${
+                  isActive({ id: 'experience' })
+                    ? 'bg-[#fff0e3] text-[#f26d21]'
+                    : 'bg-[#fffaf5] text-[#172237]'
+                }`}
+              >
+                Experience
+                <ArrowRight size={18} className="text-[#ff7418]" />
+              </button>
 
               {/* Secondary navigation */}
               {secondaryNav.map((item) => (

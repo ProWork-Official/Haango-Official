@@ -24,7 +24,6 @@ import BookingsPage from './Pages/BookingsPage';
 import BuddyBookingsPage from './Pages/BuddyBookingsPage';
 import { AuthProvider, useAuth } from './lib/auth';
 import { apiRequest } from './lib/api';
-import { checkIndiaAvailability } from './lib/siteAccess';
 import { registerPushSubscription, requestBrowserNotificationPermission, triggerBrowserNotification } from './lib/browserNotifications';
 import { shouldTrackPageVisit } from './lib/pageVisitTracking';
 import AdminAllUsersPage from './Pages/AdminAllUsersPage';
@@ -45,62 +44,12 @@ import BuddyGuidelinesPage from './Pages/BuddyGuidelinesPage';
 import PrivacyPolicyPage from './Pages/PrivacyPolicyPage';
 import TermsPage from './Pages/TermsPage';
 import CancellationPolicyPage from './Pages/CancellationPolicyPage';
-import IndiaOnlyPage from './Pages/IndiaOnlyPage';
+import BlogPage from './Pages/BlogPage';
+import AdminBlogsPage from './Pages/AdminBlogsPage';
+import NotFoundPage from './Pages/NotFoundPage';
 
-const protectedPaths = ['/dashboard', '/bookings', '/buddy-bookings', '/messages', '/admin', '/buddy-dashboard'];
+const protectedPaths = ['/dashboard', '/bookings', '/buddy-bookings', '/messages', '/admin', '/buddy-dashboard', '/referrals'];
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5005';
-
-function SiteAccessGate({ children }) {
-  const [status, setStatus] = useState('checking');
-  const [attempt, setAttempt] = useState(0);
-
-  useEffect(() => {
-    let active = true;
-
-    checkIndiaAvailability()
-      .then((isAvailable) => {
-        if (active) setStatus(isAvailable ? 'allowed' : 'blocked');
-      })
-      .catch(() => {
-        if (active) setStatus('unavailable');
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [attempt]);
-
-  if (status === 'allowed') return children;
-  if (status === 'blocked') return <IndiaOnlyPage />;
-
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-[#fffaf5] px-5 py-12">
-      <section className="w-full max-w-xl rounded-3xl border border-[#eee4d8] bg-white p-8 text-center shadow-sm sm:p-12">
-        <p className="text-sm font-bold uppercase tracking-[0.2em] text-[#ff7418]">Haango</p>
-        <h1 className="mt-5 text-2xl font-extrabold text-ink-900">
-          {status === 'checking' ? 'Checking availability…' : 'Unable to verify your location'}
-        </h1>
-        {status === 'unavailable' && (
-          <>
-            <p className="mt-4 text-base leading-7 text-ink-600">
-              We couldn’t check whether Haango is available in your country. Please try again.
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                setStatus('checking');
-                setAttempt((current) => current + 1);
-              }}
-              className="mt-6 rounded-full bg-[#ff7418] px-6 py-3 font-semibold text-white transition hover:bg-[#e96510]"
-            >
-              Try again
-            </button>
-          </>
-        )}
-      </section>
-    </main>
-  );
-}
 
 const getRoutePath = (page) => {
   const pathMap = {
@@ -115,6 +64,7 @@ const getRoutePath = (page) => {
     'become-buddy': '/become-buddy',
     'buddy-dashboard': '/buddy-dashboard',
     experience: '/experience',
+    blog: '/blog',
     'how-it-works': '/how-it-works',
     safety: '/safety',
     about: '/about',
@@ -146,6 +96,7 @@ const getPageKeyFromPath = (pathname) => {
   if (pathname.startsWith('/become-buddy')) return 'become-buddy';
   if (pathname.startsWith('/buddy-dashboard')) return 'buddy-dashboard';
   if (pathname.startsWith('/experience')) return 'experience';
+  if (pathname.startsWith('/blog')) return 'blog';
   if (pathname.startsWith('/how-it-works')) return 'how-it-works';
   if (pathname.startsWith('/safety')) return 'safety';
   if (pathname.startsWith('/about')) return 'about';
@@ -401,7 +352,7 @@ function AppContent() {
   }, [user, profile, loading, location.pathname, navigate, pendingAuthPath]);
 
   useEffect(() => {
-    if (!loading && !user && protectedPaths.includes(location.pathname)) {
+    if (!loading && !user && protectedPaths.some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`))) {
       navigate('/login', { replace: true });
     }
   }, [loading, user, location.pathname, navigate]);
@@ -564,15 +515,21 @@ function AppContent() {
           } />
 
           <Route path="/buddy-bookings" element={
-            user ? <BuddyBookingsPage onBack={() => routeNavigate('/buddy-dashboard')} onMessage={startConversation} /> : <Navigate to="/login" replace />
+            user && (profile?.role === 'BUDDY' || profile?.is_buddy)
+              ? <BuddyBookingsPage onBack={() => routeNavigate('/buddy-dashboard')} onMessage={startConversation} />
+              : <Navigate to={user ? '/dashboard' : '/login'} replace />
           } />
 
           <Route path="/become-buddy" element={<BecomeBuddyPage onNavigate={routeNavigate} />} />
           <Route path="/buddy-dashboard" element={
-            user ? <BuddyDashboardPage onNavigate={routeNavigate} unreadCount={messageUnreadCount} /> : <Navigate to="/login" replace />
+            user && (profile?.role === 'BUDDY' || profile?.is_buddy)
+              ? <BuddyDashboardPage onNavigate={routeNavigate} unreadCount={messageUnreadCount} />
+              : <Navigate to={user ? '/dashboard' : '/login'} replace />
           } />
 
           <Route path="/experience" element={<ExperiencePage onNavigate={routeNavigate} />} />
+          <Route path="/blog" element={<BlogPage onNavigate={routeNavigate} />} />
+          <Route path="/blog/:id" element={<BlogPage onNavigate={routeNavigate} />} />
           <Route path="/how-it-works" element={<HowItWorksPage onNavigate={routeNavigate} />} />
           <Route path="/safety" element={<SafetyPage onNavigate={routeNavigate} />} />
           <Route path="/about" element={<AboutPage onNavigate={routeNavigate} />} />
@@ -633,6 +590,11 @@ function AppContent() {
               ? <AdminCouponsPage onNavigate={routeNavigate} />
               : <Navigate to="/" replace />
           } />
+          <Route path="/admin/blogs" element={
+            ['ADMIN', 'SUPER_ADMIN', 'MASTER_ADMIN'].includes(profile?.role)
+              ? <AdminBlogsPage onNavigate={routeNavigate} />
+              : <Navigate to="/" replace />
+          } />
           <Route path="/admin/support-requests" element={
             ['ADMIN', 'SUPER_ADMIN', 'MASTER_ADMIN'].includes(profile?.role)
               ? <AdminSupportRequestsPage onNavigate={routeNavigate} />
@@ -662,7 +624,7 @@ function AppContent() {
             />
           } />
 
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<NotFoundPage onNavigate={routeNavigate} />} />
         </Routes>
       </main>
 
@@ -675,11 +637,9 @@ function AppContent() {
 
 function App() {
   return (
-    <SiteAccessGate>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
-    </SiteAccessGate>
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 
